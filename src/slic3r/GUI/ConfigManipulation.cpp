@@ -720,6 +720,24 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
     toggle_line("top_surface_expansion_direction", has_top_shell);
     toggle_field("top_surface_expansion_direction", has_top_surface_expansion);
 
+    //Orca: center of surface pattern
+    bool is_top_infill_centered = config->option<ConfigOptionEnum<InfillPattern>>("top_surface_pattern")->value == InfillPattern::ipArchimedeanChords ||
+                                  config->option<ConfigOptionEnum<InfillPattern>>("top_surface_pattern")->value == InfillPattern::ipOctagramSpiral;
+    bool is_bottom_infill_centered = config->option<ConfigOptionEnum<InfillPattern>>("bottom_surface_pattern")->value == InfillPattern::ipArchimedeanChords ||
+                                     config->option<ConfigOptionEnum<InfillPattern>>("bottom_surface_pattern")->value == InfillPattern::ipOctagramSpiral;
+    toggle_line("center_of_surface_pattern", (has_top_shell && is_top_infill_centered) || (has_bottom_shell && is_bottom_infill_centered));
+
+    // Orca: separate infills
+    bool is_internal_infill_centered = config->option<ConfigOptionEnum<InfillPattern>>("sparse_infill_pattern")->value == InfillPattern::ipArchimedeanChords ||
+                                       config->option<ConfigOptionEnum<InfillPattern>>("sparse_infill_pattern")->value == InfillPattern::ipOctagramSpiral ||
+                                       config->opt_string("sparse_infill_rotate_template") != "" ||
+                                       config->opt_string("solid_infill_rotate_template") != "" ;
+    toggle_line("separated_infills", is_internal_infill_centered);
+
+    // Orca: no need gaps
+    for (auto el : {"gap_fill_target", "filter_out_gap_fill"})
+        toggle_field(el, !config->opt_bool("anisotropic_surfaces"));
+
     for (auto el : { "infill_direction", "sparse_infill_line_width", "gap_fill_target","filter_out_gap_fill","infill_wall_overlap",
         "bridge_angle", "internal_bridge_angle", "relative_bridge_angle",
         "solid_infill_direction", "solid_infill_rotate_template", "internal_solid_infill_pattern", "internal_solid_filament_id", "top_surface_filament_id", "bottom_surface_filament_id",
