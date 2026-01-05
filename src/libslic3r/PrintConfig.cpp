@@ -4433,6 +4433,21 @@ void PrintConfigDef::init_fff_params()
     // start and end point is from the change_filament_gcode
     def->set_default_value(new ConfigOptionPoints{Vec2d(30, -3), Vec2d(54, 245)});
 
+    def          = this->add("improved_corners", coBool);
+    def->label   = L("Improve corners");
+    def->tooltip = L("Makes the corners flawless.");
+    def->mode    = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(false));
+
+    def           = this->add("improved_corners_overlap", coFloat);
+    def->label    = L("Improve corners overlap");
+    def->tooltip  = L("The offset coefficient of the protective zone near the corners which equal to the nozzle diameter. ");
+    def->sidetext = "%";
+    def->min      = 0.;
+    def->max      = 1.;
+    def->mode     = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0.40));
+
     def = this->add("reduce_infill_retraction", coBool);
     def->label = L("Reduce infill retraction");
     def->tooltip = L("Don't retract when the travel is in infill area absolutely. That means the oozing can't been seen. "

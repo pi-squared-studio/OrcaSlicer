@@ -860,6 +860,8 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, co
 
     toggle_line("flush_into_objects", !is_global_config);
 
+    toggle_line("improved_corners_overlap", config->opt_bool("improved_corners"));
+
     toggle_line("support_interface_not_for_body",config->opt_int("support_interface_filament")&&!config->opt_int("support_filament"));
 
     NoiseType fuzzy_skin_noise_type = config->opt_enum<NoiseType>("fuzzy_skin_noise_type");

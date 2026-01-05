@@ -5933,6 +5933,10 @@ double GCode::calc_max_volumetric_speed(const double layer_height, const double 
 std::string GCode::_extrude(const ExtrusionPath &path, std::string description, double speed)
 {
     std::string gcode;
+    const double nozzle_diameter = EXTRUDER_CONFIG(nozzle_diameter);
+    const bool   possible_loop   = path.is_closed() || path.is_loop() ||
+                                   ((path.last_point() - path.first_point()).norm() * SCALING_FACTOR <
+                                   (nozzle_diameter + m_config.seam_gap.get_abs_value(nozzle_diameter)) );
 
     if (is_bridge(path.role()))
         description += " (bridge)";
@@ -6534,7 +6538,22 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
             if (!m_config.enable_arc_fitting || path.polyline.fitting_result.empty() || m_config.spiral_mode || sloped != nullptr) {
                 double path_length = 0.;
                 double total_length = sloped == nullptr ? 0. : path.polyline.length() * SCALING_FACTOR;
-                for (const Line& line : path.polyline.lines()) {
+                
+                //Orca: Improved corners
+                Lines  lines(path.polyline.lines());
+                std::vector<double> corners(lines.size() + 1, 0);
+                int          _angle_idx = 0;
+
+                if (m_config.improved_corners) { // collect angle info for all junctions
+                    for (int _i = 1; _i < lines.size(); _i++)
+                        corners[_i] = lines[_i].orientation() - lines[_i - 1].orientation();
+                    if (possible_loop) {
+                        corners[0] = lines[0].orientation() - lines[lines.size() - 1].orientation();
+                        corners[lines.size()] = corners[0]; 
+                    }
+                }
+
+                for (const Line& line : lines) {
                     std::string tempDescription = description;
                     const double line_length = line.length() * SCALING_FACTOR;
                     if (line_length < EPSILON)
@@ -6551,10 +6570,33 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                     }
                     if (sloped == nullptr) {
                         // Normal extrusion
-                        gcode += m_writer.extrude_to_xy(
-                            this->point_to_gcode(line.b),
-                            dE,
-                            GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
+                        if (m_config.improved_corners) { // Orca: Improved corners
+                            Vec2d  _a = this->point_to_gcode(line.a);
+                            Vec2d  _c(this->point_to_gcode(line.b) - _a);
+
+                            // Orca: TODO reduce the print volume when there are sharp corners
+                            _c.normalize(); // get normalized vector
+                            _c *= nozzle_diameter * (1. - m_config.improved_corners_overlap); // get base vector
+                            Vec2d  _cS = _c * abs(sin(corners[_angle_idx])); // get start angeled vector 
+                            Vec2d  _cE = _c * abs(sin(corners[_angle_idx + 1])); // get end angeled vector 
+
+                            double _dE, _dS;
+                            _dS = dE * _cS.norm() / line_length; // get start extrusion volume
+                            _dE = dE * _cE.norm() / line_length; // get end extrusion volume
+
+                            if (_dS + _dE < line_length) { // if improved corners send a bunch of commands to the g-code
+                                dE -= _dS + _dE;
+                                Vec2d _b = this->point_to_gcode(line.b);
+                                if (_dS)
+                                    gcode += m_writer.extrude_to_xy(_a + _cS, 0, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
+                                gcode += m_writer.extrude_to_xy(_b - _cE, dE, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
+                                if (_dE)
+                                    gcode += m_writer.extrude_to_xy(_b, 0, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
+                            } else
+                                gcode += m_writer.extrude_to_xy(this->point_to_gcode(line.b), dE, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
+                        } else {
+                            gcode += m_writer.extrude_to_xy(this->point_to_gcode(line.b), dE, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
+                        }
                     } else {
                         // Sloped extrusion
                         const auto [z_ratio, e_ratio] = sloped->interpolate(path_length / total_length);
@@ -6565,6 +6607,7 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                             dE * e_ratio,
                             GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
                     }
+                    _angle_idx++;
                 }
             } else {
                 // BBS: start to generate gcode from arc fitting data which includes line and arc
