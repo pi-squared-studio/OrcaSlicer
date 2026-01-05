@@ -6539,12 +6539,12 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                 double path_length = 0.;
                 double total_length = sloped == nullptr ? 0. : path.polyline.length() * SCALING_FACTOR;
                 
-                //Orca: Improved corners
+                //Orca: Cut corners
                 Lines  lines(path.polyline.lines());
                 std::vector<double> corners(lines.size() + 1, 0);
                 int          _angle_idx = 0;
 
-                if (m_config.improved_corners) { // collect angle info for all junctions
+                if (m_config.cut_corners) { // collect angle info for all junctions
                     for (int _i = 1; _i < lines.size(); _i++)
                         corners[_i] = lines[_i].orientation() - lines[_i - 1].orientation();
                     if (possible_loop) {
@@ -6570,13 +6570,13 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                     }
                     if (sloped == nullptr) {
                         // Normal extrusion
-                        if (m_config.improved_corners) { // Orca: Improved corners
+                        if (m_config.cut_corners) { // Orca: Сut corners
                             Vec2d  _a = this->point_to_gcode(line.a);
                             Vec2d  _c(this->point_to_gcode(line.b) - _a);
 
                             // Orca: TODO reduce the print volume when there are sharp corners
                             _c.normalize(); // get normalized vector
-                            _c *= nozzle_diameter * (1. - m_config.improved_corners_overlap); // get base vector
+                            _c *= nozzle_diameter * (1. - m_config.cut_corners_overlap); // get base vector
                             Vec2d  _cS = _c * abs(sin(corners[_angle_idx])); // get start angeled vector 
                             Vec2d  _cE = _c * abs(sin(corners[_angle_idx + 1])); // get end angeled vector 
 
@@ -6584,7 +6584,7 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                             _dS = dE * _cS.norm() / line_length; // get start extrusion volume
                             _dE = dE * _cE.norm() / line_length; // get end extrusion volume
 
-                            if (_dS + _dE < line_length) { // if improved corners send a bunch of commands to the g-code
+                            if (_dS + _dE < line_length) { // if Сut corners send a bunch of commands to the g-code
                                 dE -= _dS + _dE;
                                 Vec2d _b = this->point_to_gcode(line.b);
                                 if (_dS)
