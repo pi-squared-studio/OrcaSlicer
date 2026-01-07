@@ -6541,16 +6541,24 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                 
                 //Orca: Cut corners
                 Lines  lines(path.polyline.lines());
-                std::vector<double> corners(lines.size() + 1, 0);
+                std::vector<double> corners(lines.size(), 0);
                 int          _angle_idx = 0;
+
+                #define M_2PI (M_PI * 2.)
+                auto constrain2PI = [](double x) {
+                    while (x < 0.) x += M_2PI;
+                    return fmod(x, M_2PI);
+                };
+                auto constrainPI = [](double x) {
+                    while (x < 0.) x += M_2PI;
+                    return fmod(x + M_PI, M_2PI) - M_PI;
+                };
 
                 if (m_config.cut_corners) { // collect angle info for all junctions
                     for (int _i = 1; _i < lines.size(); _i++)
-                        corners[_i] = lines[_i].orientation() - lines[_i - 1].orientation();
-                    if (possible_loop) {
-                        corners[0] = lines[0].orientation() - lines[lines.size() - 1].orientation();
-                        corners[lines.size()] = corners[0]; 
-                    }
+                        corners[_i] = constrainPI(constrain2PI(lines[_i].orientation()) - constrain2PI(lines[_i - 1].orientation())) / 2.;
+                    if (possible_loop) 
+                        corners[0] = constrainPI(constrain2PI(lines[0].orientation()) - constrain2PI(lines[lines.size() - 1].orientation())) / 2.;
                 }
 
                 for (const Line& line : lines) {
@@ -6570,33 +6578,33 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                     }
                     if (sloped == nullptr) {
                         // Normal extrusion
-                        if (m_config.cut_corners) { // Orca: Сut corners
+                        if (m_config.cut_corners && path.role() != erGapFill) { // Orca: Сut corners
                             Vec2d  _a = this->point_to_gcode(line.a);
                             Vec2d  _c(this->point_to_gcode(line.b) - _a);
 
                             // Orca: TODO reduce the print volume when there are sharp corners
                             _c.normalize(); // get normalized vector
-                            _c *= nozzle_diameter * (1. - m_config.cut_corners_overlap); // get base vector
-                            Vec2d  _cS = _c * abs(sin(corners[_angle_idx])); // get start angeled vector 
-                            Vec2d  _cE = _c * abs(sin(corners[_angle_idx + 1])); // get end angeled vector 
+                            double delta = 1. - m_config.cut_corners_overlap; //0.392699082;
+                            double dispS = nozzle_diameter * tan(abs(corners[_angle_idx])) * 0.5;
+                            Vec2d _cS = _c * (nozzle_diameter * delta + (_angle_idx ? dispS : 0.)); 
+                            Vec2d _cE = _c * (nozzle_diameter * delta + (_angle_idx == lines.size() ? nozzle_diameter * tan(abs(corners[0])) * 0.5 : 0.)); 
 
                             double _dE, _dS;
                             _dS = dE * _cS.norm() / line_length; // get start extrusion volume
                             _dE = dE * _cE.norm() / line_length; // get end extrusion volume
 
-                            if (_dS + _dE < line_length) { // if Сut corners send a bunch of commands to the g-code
-                                dE -= _dS + _dE;
-                                Vec2d _b = this->point_to_gcode(line.b);
-                                if (_dS)
-                                    gcode += m_writer.extrude_to_xy(_a + _cS, 0, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
-                                gcode += m_writer.extrude_to_xy(_b - _cE, dE, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
-                                if (_dE)
-                                    gcode += m_writer.extrude_to_xy(_b, 0, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
-                            } else
-                                gcode += m_writer.extrude_to_xy(this->point_to_gcode(line.b), dE, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
-                        } else {
-                            gcode += m_writer.extrude_to_xy(this->point_to_gcode(line.b), dE, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
+                            double sum_d = _dS + _dE;
+                            if (dE > sum_d * 2.) { // reduce cutting for small extrusion lines 
+                                dE -= sum_d;
+                                if (nozzle_diameter * 3. < line_length) { // if cut corners used send an additional commands to the g-code
+                                    Vec2d _b = this->point_to_gcode(line.b);
+                                    if (_dS) gcode += m_writer.extrude_to_xy(_a + _cS, 0, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
+                                    gcode += m_writer.extrude_to_xy(_b - _cE, dE, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
+                                    dE = 0;
+                                }
+                            } 
                         }
+                        gcode += m_writer.extrude_to_xy(this->point_to_gcode(line.b), dE, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
                     } else {
                         // Sloped extrusion
                         const auto [z_ratio, e_ratio] = sloped->interpolate(path_length / total_length);

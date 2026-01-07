@@ -4435,17 +4435,18 @@ void PrintConfigDef::init_fff_params()
 
     def          = this->add("cut_corners", coBool);
     def->label   = L("Cut corners");
-    def->tooltip = L("Makes the corners flawless.");
+    def->tooltip = L("Makes the corners flawless");
     def->mode    = comAdvanced;
     def->set_default_value(new ConfigOptionBool(false));
 
     def           = this->add("cut_corners_overlap", coFloat);
     def->label    = L("Cut corners overlap");
-    def->tooltip  = L("The offset coefficient of the protective zone near the corners which equal to the nozzle diameter. ");
+    def->tooltip  = L("The offset coefficient of the protective zone near the corners which equal to the nozzle diameter. "
+                      "Default is 0.5. ");
     def->min      = 0.;
     def->max      = 1.;
     def->mode     = comAdvanced;
-    def->set_default_value(new ConfigOptionFloat(0.40));
+    def->set_default_value(new ConfigOptionFloat(0.5));
 
     def = this->add("reduce_infill_retraction", coBool);
     def->label = L("Reduce infill retraction");
