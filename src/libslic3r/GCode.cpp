@@ -6578,10 +6578,10 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                     }
                     if (sloped == nullptr) {
                         // Normal extrusion
-                        Vec2d &_b = this->point_to_gcode(line.b); // end point
+                        Vec2d const _b = this->point_to_gcode(line.b);     // end point
                         if (m_config.cut_corners) { // Orca: Сut corners 
-                            Vec2d &_a = this->point_to_gcode(line.a); // start point
-                            Vec2d _c(this->point_to_gcode(line.b) - _a); // line's vector
+                            Vec2d const _a = this->point_to_gcode(line.a); // start point
+                            Vec2d _c(this->point_to_gcode(line.b) - _a);   // line's vector
                             double const semi_diameter = nozzle_diameter / 2.;
                             double const onehalf_diameter = nozzle_diameter * 1.5;
                             _c.normalize(); // get normalized vector
