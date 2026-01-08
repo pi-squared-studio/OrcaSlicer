@@ -6578,33 +6578,41 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                     }
                     if (sloped == nullptr) {
                         // Normal extrusion
-                        if (m_config.cut_corners && path.role() != erGapFill) { // Orca: Сut corners
-                            Vec2d  _a = this->point_to_gcode(line.a);
-                            Vec2d  _c(this->point_to_gcode(line.b) - _a);
+                        Vec2d &_b = this->point_to_gcode(line.b); // end point
+                        if (m_config.cut_corners) { // Orca: Сut corners 
+                            Vec2d &_a = this->point_to_gcode(line.a); // start point
+                            Vec2d _c(this->point_to_gcode(line.b) - _a); // line's vector
+                            double const semi_diameter = nozzle_diameter / 2.;
 
-                            // Orca: TODO reduce the print volume when there are sharp corners
                             _c.normalize(); // get normalized vector
-                            double delta = 1. - m_config.cut_corners_overlap; //0.392699082;
-                            double dispS = nozzle_diameter * tan(abs(corners[_angle_idx])) * 0.5;
-                            Vec2d _cS = _c * (nozzle_diameter * delta + (_angle_idx ? dispS : 0.)); 
-                            Vec2d _cE = _c * (nozzle_diameter * delta + (_angle_idx == lines.size() ? nozzle_diameter * tan(abs(corners[0])) * 0.5 : 0.)); 
 
-                            double _dE, _dS;
-                            _dS = dE * _cS.norm() / line_length; // get start extrusion volume
-                            _dE = dE * _cE.norm() / line_length; // get end extrusion volume
+                            double const _lN = nozzle_diameter * (1. - m_config.cut_corners_overlap); // get lenght for cutting lines at the line ends to pervent corner overflow
+                            double const _lS = (_angle_idx ? semi_diameter * tan(abs(corners[_angle_idx])) : 0.); // get the start cutting lenght for overlaping lines
+                            double const _lE = (_angle_idx == lines.size() - 1 ? semi_diameter * tan(abs(corners[0])) : 0.); // get the end cutting lenght for overlaping lines
 
-                            double sum_d = _dS + _dE;
+                            double const _eL = dE / line_length; // get line flowrate
+                            double const _eN = _eL * _lN;        // get compensation extrusion volume
+                            double const _eS = _eL * _lS;        // get start extrusion volume
+                            double const _eE = _eL * _lE;        // get end extrusion volume
+
+                            double const sum_d = _eN + _eS + _eE;
                             if (dE > sum_d * 2.) { // reduce cutting for small extrusion lines 
                                 dE -= sum_d;
-                                if (nozzle_diameter * 3. < line_length) { // if cut corners used send an additional commands to the g-code
-                                    Vec2d _b = this->point_to_gcode(line.b);
-                                    if (_dS) gcode += m_writer.extrude_to_xy(_a + _cS, 0, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
-                                    gcode += m_writer.extrude_to_xy(_b - _cE, dE, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
-                                    dE = 0;
+                                if (nozzle_diameter * 3. < line_length) { // if cut corners used, send an additional commands to the g-code, owerwise print the line with reduced volume
+                                    if ((_lS + _lN) < nozzle_diameter) 
+                                        gcode += m_writer.extrude_to_xy(_a + _c * (_lN  + _lS), 0., GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
+                                    else 
+                                        for (double _v = 0.; _v < _lS; _v += semi_diameter)
+                                            gcode += m_writer.extrude_to_xy(_a + _c * (_lN  + _v), _eS * semi_diameter / pow(_lS, 2) * _v, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
+                                    gcode += m_writer.extrude_to_xy(_b - _c * (_lN + _lE), dE, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
+                                    if ((_lE + _lN) > nozzle_diameter) 
+                                        for (double _v = _lE; _v > 0.; _v -= semi_diameter) 
+                                            gcode += m_writer.extrude_to_xy(_b - _c * (_lN + _v), _eE * semi_diameter / pow(_lE, 2) * _v, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
+                                    dE = 0.; // send to finish extrude with zero-flow to the end point
                                 }
                             } 
                         }
-                        gcode += m_writer.extrude_to_xy(this->point_to_gcode(line.b), dE, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
+                        gcode += m_writer.extrude_to_xy(_b, dE, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
                     } else {
                         // Sloped extrusion
                         const auto [z_ratio, e_ratio] = sloped->interpolate(path_length / total_length);
