@@ -4435,14 +4435,24 @@ void PrintConfigDef::init_fff_params()
 
     def          = this->add("cut_corners", coBool);
     def->label   = L("Cut corners");
-    def->tooltip = L("Makes the corners flawless");
+    def->tooltip = L("Makes the corners flawless. \n"
+                     "Eliminates excess material at the ends of any printed line. " 
+                     "Positive moment is especially noticeable on the protruding corners of the model. "
+                     "This also affects to decrease the overflow of a solid infill (like as Archimedean Chords) if it consists of many small segments. \n"
+                     "This option eliminates overflow in the connection of two printed lines when excessive material is extruded at their ends. \n"
+                     "To calibrate the shape of the resulting corners, it is recommended to disable any additional flow and speed shapers such as Jerk, Junction Deviation, Pressure Advance, and Input Shaping... "
+                     "The effect of this option does not depend on the print speed, but choose slow speeds for calibration to eliminate other factors that affect accuracy. "
+                     "The correct results will be on the side that is less affected by the resonance effect of the print head. "
+                     "After this calibration, adjust the settings according to the other items listed above, as well the overlapping of seams, infills and perimeters. ");
     def->mode    = comAdvanced;
     def->set_default_value(new ConfigOptionBool(false));
 
     def           = this->add("cut_corners_overlap", coFloat);
     def->label    = L("Cut corners overlap");
     def->tooltip  = L("The offset coefficient of the protective zone near the corners which equal to the nozzle diameter. "
-                      "Default is 0.5. ");
+                      "Mathematical calculations indicate an optimal value of 0.75, but it can be reduced to 0.5 depending on the material properties. "
+                      "If you select a value of 1.0, the corner overlap will be the same as when cut_corners is disabled, but the flow compensation will remain when overlapping lines at sharp angles. \n"
+                      "Default is 0.625. ");
     def->min      = 0.;
     def->max      = 1.;
     def->mode     = comAdvanced;

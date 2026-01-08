@@ -6583,7 +6583,7 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                             Vec2d &_a = this->point_to_gcode(line.a); // start point
                             Vec2d _c(this->point_to_gcode(line.b) - _a); // line's vector
                             double const semi_diameter = nozzle_diameter / 2.;
-
+                            double const onehalf_diameter = nozzle_diameter * 1.5;
                             _c.normalize(); // get normalized vector
 
                             double const _lN = nozzle_diameter * (1. - m_config.cut_corners_overlap); // get lenght for cutting lines at the line ends to pervent corner overflow
@@ -6599,13 +6599,13 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                             if (dE > sum_d * 2.) { // reduce cutting for small extrusion lines 
                                 dE -= sum_d;
                                 if (nozzle_diameter * 3. < line_length) { // if cut corners used, send an additional commands to the g-code, owerwise print the line with reduced volume
-                                    if ((_lS + _lN) < nozzle_diameter) 
+                                    if ((_lS + _lN) < onehalf_diameter) 
                                         gcode += m_writer.extrude_to_xy(_a + _c * (_lN  + _lS), 0., GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
                                     else 
                                         for (double _v = 0.; _v < _lS; _v += semi_diameter)
                                             gcode += m_writer.extrude_to_xy(_a + _c * (_lN  + _v), _eS * semi_diameter / pow(_lS, 2) * _v, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
                                     gcode += m_writer.extrude_to_xy(_b - _c * (_lN + _lE), dE, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
-                                    if ((_lE + _lN) > nozzle_diameter) 
+                                    if ((_lE + _lN) > onehalf_diameter) 
                                         for (double _v = _lE; _v > 0.; _v -= semi_diameter) 
                                             gcode += m_writer.extrude_to_xy(_b - _c * (_lN + _v), _eE * semi_diameter / pow(_lE, 2) * _v, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
                                     dE = 0.; // send to finish extrude with zero-flow to the end point
