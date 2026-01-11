@@ -4450,13 +4450,13 @@ void PrintConfigDef::init_fff_params()
     def           = this->add("cut_corners_overlap", coFloat);
     def->label    = L("Cut corners overlap");
     def->tooltip  = L("The offset coefficient of the protective zone near the corners which equal to the nozzle diameter. "
-                      "Mathematical calculations indicate an optimal value of 0.75, but it can be reduced to 0.5 depending on the material properties. "
+                      "Mathematical calculations indicate an optimal value of 0.79, but it can be ajusted depending on the material properties. "
                       "If you select a value of 1.0, the corner overlap will be the same as when cut_corners is disabled, but the flow compensation will remain when overlapping lines at sharp angles. \n"
-                      "Default is 0.625. ");
-    def->min      = 0.;
+                      "Default is 0.785398. ");
+    def->min      = 0.5;
     def->max      = 1.;
     def->mode     = comAdvanced;
-    def->set_default_value(new ConfigOptionFloat(0.625));
+    def->set_default_value(new ConfigOptionFloat(0.785398));
 
     def = this->add("reduce_infill_retraction", coBool);
     def->label = L("Reduce infill retraction");
