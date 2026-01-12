@@ -6626,7 +6626,7 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                             } else
                                 dE = e_per_mm * m_config.cut_corners_overlap * std::max(line_length - (_lS + _lE) / 2. / _k - nozzle_diameter * m_config.cut_corners_overlap * (_aS + _aE) / M_PI_2, 0.); // with difference between a round (real) and square (slicer's math) nozzle
                         }
-                        if (dE) gcode += m_writer.extrude_to_xy(_b, dE, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
+                        gcode += m_writer.extrude_to_xy(_b, dE, GCodeWriter::full_gcode_comment ? tempDescription : "", path.is_force_no_extrusion());
                     } else {
                         // Sloped extrusion
                         const auto [z_ratio, e_ratio] = sloped->interpolate(path_length / total_length);
