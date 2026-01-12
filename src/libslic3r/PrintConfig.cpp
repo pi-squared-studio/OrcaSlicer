@@ -4436,8 +4436,9 @@ void PrintConfigDef::init_fff_params()
     def          = this->add("cut_corners", coBool);
     def->label   = L("Cut corners");
     def->tooltip = L("Makes the corners flawless. \n"
-                     "Eliminates excess material at the ends of any printed line. " 
-                     "Positive moment is especially noticeable on the protruding corners of the model. "
+                     "Eliminates excess material at the ends and their junctions of any printed line. " 
+                     "Positive moment is especially noticeable on the protruding corners of the model and the cleanliness of the complex surface. "
+                     "The actions of this option are repeat the small_area_flow_compensation with precision accuracy, but they do not cancel it for other elements of the printed model, such as perimeters and infills. "
                      "This also affects to decrease the overflow of a solid infill (like as Archimedean Chords) if it consists of many small segments. \n"
                      "This option eliminates overflow in the connection of two printed lines when excessive material is extruded at their ends. \n"
                      "To calibrate the shape of the resulting corners, it is recommended to disable any additional flow and speed shapers such as Jerk, Junction Deviation, Pressure Advance, and Input Shaping... "
