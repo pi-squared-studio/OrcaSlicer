@@ -4441,6 +4441,8 @@ void PrintConfigDef::init_fff_params()
                      "The actions of this option are repeat the small_area_flow_compensation with precision accuracy, but they do not cancel it for other elements of the printed model, such as perimeters and infills. "
                      "This also affects to decrease the overflow of a solid infill (like as Archimedean Chords) if it consists of many small segments. \n"
                      "This option eliminates overflow in the connection of two printed lines when excessive material is extruded at their ends. \n"
+                     "Cut corners are not supported for sloped lines and arc fitting and will be ignored on such objects. To better use this feature, disable arc_fitting support and do not use scarf seams. "
+                     "Since this option correctly forms the start and final ends of the seam, it is recommended to use regular seams with a gap of about the nozzle diameter or 100%. \n"  
                      "To calibrate the shape of the resulting corners, it is recommended to disable any additional flow and speed shapers such as Jerk, Junction Deviation, Pressure Advance, and Input Shaping... "
                      "The effect of this option does not depend on the print speed, but choose slow speeds for calibration to eliminate other factors that affect accuracy. "
                      "The correct results will be on the side that is less affected by the resonance effect of the print head. "
@@ -4450,12 +4452,12 @@ void PrintConfigDef::init_fff_params()
 
     def           = this->add("cut_corners_overlap", coFloat);
     def->label    = L("Cut corners overlap");
-    def->tooltip  = L("The offset coefficient of the protective zone near the corners which equal to the nozzle diameter. "
+    def->tooltip  = L("The offset coefficient of the protective zone near the corners which equal to the nozzle diameter. \n"
                       "Mathematical calculations indicate an optimal value of 0.79, but it can be ajusted depending on the material properties. "
                       "If you select a value of 1.0, the corner overlap will be the same as when cut_corners is disabled, but the flow compensation will remain when overlapping lines at sharp angles. \n"
                       "Default is 0.785398. ");
     def->min      = 0.5;
-    def->max      = 1.;
+    def->max      = 2.;
     def->mode     = comAdvanced;
     def->set_default_value(new ConfigOptionFloat(0.785398));
 
