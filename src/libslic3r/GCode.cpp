@@ -6576,8 +6576,9 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                 Vec2d _a2 = this->point_to_gcode(lines.front().a) + _c2 * nozzle_diameter;
 
                 for (const Line& line : lines) {
-                    std::string tempDescription = description;
-                    const double line_length = line.length() * SCALING_FACTOR;
+                    std::string  tempDescription = description;
+                    const double line_length     = line.length() * SCALING_FACTOR;
+                    const bool   is_last_line    = _angle_idx == lines.size() - 1;
                     if (line_length < EPSILON)
                         continue;
                     path_length += line_length;
@@ -6602,7 +6603,7 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                             double const fill_diameter = nozzle_diameter / 8.;
 
                             double _aS = (_angle_idx ? abs(corners[_angle_idx]) : 0.); // get the start angle for overlaping lines
-                            double _aE = (_angle_idx == lines.size() - 1 ? abs(corners[0]) : 0.); // get the end angle for overlaping lines
+                            double _aE = (is_last_line ? abs(corners[0]) : 0.);        // get the end angle for overlaping lines
                             double _lS = semi_diameter * tan(_aS); // get the start cutting lenght for overlaping lines
                             double _lE = semi_diameter * tan(_aE); // get the end cutting lenght for overlaping lines
                             double _k = 1.;                        // the coefficient if the slopes are intersected
@@ -6639,7 +6640,7 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                                 // finish extrude
                                 gcode += m_writer.extrude_to_xy(_b, e_per_mm * _z / 2., GCodeWriter::full_gcode_comment ? tempDescription + " (e-finish)" : "", path.is_force_no_extrusion());
                                 // end bulb forming
-                                if (_thres < _aS && (_angle_idx != (lines.size() - 1))) 
+                                if (is_last_line ? this->point_to_gcode(lines.begin()->a - lines.end()->b).norm() > semi_diameter + quarter_diameter : _thres < _aS) 
                                     gcode += m_writer.extrude_to_xy(_b, _extr_ols * _aE / M_PI_2, GCodeWriter::full_gcode_comment ? tempDescription + " (e-bulb)" : "", path.is_force_no_extrusion());
                             } else 
                                 // short line
