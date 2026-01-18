@@ -6538,7 +6538,7 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                 //Orca: Cut corners
                 bool     is_cut_corners = m_config.cut_corners && (
                                            path.role() == erExternalPerimeter  
-                                        // || path.role() == erPerimeter 
+                                        || path.role() == erPerimeter 
                                         || path.role() == erOverhangPerimeter
                                         // || path.role() == erInternalInfill
                                         // || path.role() == erSolidInfill
@@ -6548,7 +6548,7 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                     );
                 Lines               lines(path.polyline.lines());
                 const int           _corners_size = lines.size();
-                std::vector<double> corners(_corners_size, 0.);
+                std::vector<double> corners(_corners_size + 1, 0.);
                 int                 _angle_idx      = 0;
                 const double nozzle_diameter = EXTRUDER_CONFIG(nozzle_diameter);
                 const bool   possible_loop   = path.is_closed() || path.is_loop() ||
@@ -6569,7 +6569,7 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                     for (int _i = 1; _i < lines.size(); _i++)
                         corners[_i] = constrainPI(constrain2PI(lines[_i].orientation()) - constrain2PI(lines[_i - 1].orientation())) / 2.;
                     if (possible_loop)
-                        corners[0] = constrainPI(constrain2PI(lines[0].orientation()) - constrain2PI(lines[_corners_size - 1].orientation())) / 2.;
+                        corners[0] = corners[_corners_size] = constrainPI(constrain2PI(lines[0].orientation()) - constrain2PI(lines[_corners_size - 1].orientation())) / 2.;
                 }
 
                 for (const Line& line : lines) {
@@ -6599,11 +6599,13 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                             double const quarter_diameter = nozzle_diameter * 0.25;
                             double const fill_diameter = nozzle_diameter / 8.;
 
-                            double _aS = (_angle_idx ? abs(corners[_angle_idx]) : 0.); // get the start angle for overlaping lines
-                            double _aE = (is_last_line ? abs(corners[0]) : 0.);        // get the end angle for overlaping lines
-                            double _lS = semi_diameter * tan(_aS); // get the start cutting lenght for overlaping lines
-                            double _lE = semi_diameter * tan(_aE); // get the end cutting lenght for overlaping lines
-                            double _k = 1.;                        // the coefficient if the slopes are intersected
+                            double       _aS  = (_angle_idx ? abs(corners[_angle_idx]) : 0.); // get the start angle for overlaping lines
+                            double       _aE  = (is_last_line ? abs(corners[0]) : 0.);        // get the end angle for overlaping lines
+                            double       _aE2 = abs(corners[_angle_idx + 1]);                 // get the end angle for overlaping lines for all corners
+                            double       _lS  = semi_diameter * tan(_aS);  // get the start cutting lenght for overlaping lines
+                            double       _lE  = semi_diameter * tan(_aE);  // get the end cutting lenght for overlaping lines
+                            double       _lE2 = semi_diameter * tan(_aE2); // get the end cutting lenght for overlaping lines for all corners
+                            double       _k   = 1.;                        // the coefficient if the slopes are intersected
                             double const _dS = semi_diameter * sin(corners[_angle_idx]) * 0.5;
                             if ((_lS + _lE) > line_length) { // correct the lengths if the sloped ranges are longer than the line
                                 _k = line_length / (_lS + _lE);
@@ -6626,7 +6628,7 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                                 // start slope
                                     for (_z = quarter_diameter; _z < _lS; _z += semi_diameter)
                                         gcode += m_writer.extrude_to_xy(_a + _c * (_z + quarter_diameter), _extr_k * std::clamp(lerp(0., semi_diameter / _lS, _z), fill_diameter, semi_diameter), GCodeWriter::full_gcode_comment ? tempDescription + " (s-slope)" : "", path.is_force_no_extrusion());
-                                    _z = line_length - _lS - _lE - (_z - _lS) * _aS / M_PI_2 / 2.;
+                                    _z = line_length - _lS - _lE - (_z - _lS) / 2. * _aS / M_PI_2;
                                 }
                                 // middle line
                                 if (_z > 0.)
@@ -6639,13 +6641,13 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                                     gcode += m_writer.extrude_to_xy(_b, e_per_mm * _z / 2., GCodeWriter::full_gcode_comment ? tempDescription + " (e-finish)" : "", path.is_force_no_extrusion());
                                 // end bulb forming (@_aE < 135 deg)
                                 if (is_last_line) {
-                                    if ((_b - this->point_to_gcode(lines.begin()->a)).norm() > (semi_diameter + quarter_diameter) * (_aE < M_PI_4 ? 1. : tan(_aE))) 
+                                    if ((_b - this->point_to_gcode(lines.begin()->a)).norm() > semi_diameter * (_aE < M_PI_4 ? 1. : tan(_aE))) 
                                         gcode += m_writer.extrude_to_xy(_b, _extr_ols, GCodeWriter::full_gcode_comment ? tempDescription + " (e-bulb)" : "", path.is_force_no_extrusion());
                                 } else if (_thres)
-                                    gcode += m_writer.extrude_to_xy(_b, _extr_ols * _aE / M_PI_2, GCodeWriter::full_gcode_comment ? tempDescription + " (corner)" : "", path.is_force_no_extrusion());
+                                    gcode += m_writer.extrude_to_xy(_b, _extr_ols * _aE2 / M_PI_2, GCodeWriter::full_gcode_comment ? tempDescription + " (corner)" : "", path.is_force_no_extrusion());
                             } else {
                                 // short line
-                                gcode += m_writer.extrude_to_xy(_b, e_per_mm * std::clamp(line_length - (_lS + _lE) / 2., 0., line_length), GCodeWriter::full_gcode_comment ? tempDescription  + " (short line)" : "", path.is_force_no_extrusion());
+                                gcode += m_writer.extrude_to_xy(_b, e_per_mm * std::clamp(line_length - (_lS + _lE2) / 4., 0., line_length), GCodeWriter::full_gcode_comment ? tempDescription  + " (short line)" : "", path.is_force_no_extrusion());
                             }
                         } else {
                             // normal print
