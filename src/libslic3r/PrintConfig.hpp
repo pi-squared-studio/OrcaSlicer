@@ -45,8 +45,10 @@ enum class FuzzySkinType {
 
 enum class FuzzySkinMode {
     Displacement,
+    Displacement_plus,
     Extrusion,
     Combined,
+    Fur,
 };
 
 enum class NoiseType {

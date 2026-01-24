@@ -21,6 +21,7 @@ struct FuzzySkinConfig
     int           noise_octaves;
     double        noise_persistence;
     FuzzySkinMode mode;
+    double        minimal_line; // info variable, keep it last
 
     bool operator==(const FuzzySkinConfig& r) const
     {
