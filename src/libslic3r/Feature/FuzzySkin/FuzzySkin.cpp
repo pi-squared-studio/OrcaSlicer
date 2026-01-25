@@ -121,7 +121,7 @@ void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice
 
     const double min_dist_between_points = true ? cfg.point_distance * 3. / 4. : cfg.point_distance; // hardcoded: the point distance may vary between 3/4 and 5/4 the supplied value
     const double range_random_point_dist = true ? cfg.point_distance / 2. : 0.; // _is_random ? ... - disabled for the test function of precise corners when using 3D noise
-    const coord_t minimal_line   = cfg.minimal_line; // Minimal linewidth for this condition for height and spacing: parsms * float(1. - 0.25 * PI);
+    double minimal_line   = double(cfg.minimal_line); // Minimal linewidth for this condition for height and spacing: parsms * float(1. - 0.25 * PI);
     double dist_left_over = random_value() * (min_dist_between_points / 2.); // the distance to be traversed on the line before making the first new point
 
     // Set a bypass for non-closed paths
