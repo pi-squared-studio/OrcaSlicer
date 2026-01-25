@@ -263,7 +263,7 @@ void group_region_by_fuzzify(PerimeterGenerator& g)
                                   region_config.fuzzy_skin_octaves,
                                   region_config.fuzzy_skin_persistence,
                                   region_config.fuzzy_skin_mode,
-                                  scaled(std::max(g.layer_height, (double)g.ext_perimeter_flow.spacing()) * 0.215)}; // param * (1. - 0.25 * PI)
+                                  scaled(std::max(g.layer_height, double(g.ext_perimeter_flow.spacing())) * 0.215)}; // param * (1. - 0.25 * PI)
         auto&                 surfaces = regions[cfg];
         for (const auto& surface : region->slices.surfaces) {
             surfaces.push_back(&surface);

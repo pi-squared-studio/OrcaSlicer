@@ -381,7 +381,7 @@ static ExtrusionEntityCollection traverse_extrusions(const PerimeterGenerator& p
             el_extrusion.junctions.clear();
             Arachne::ExtrusionLine el_complex(*extrusion);
             el_complex.junctions.clear();
-            coord_t minimum_line = scaled(std::max(perimeter_generator.layer_height, (double)perimeter_generator.ext_perimeter_flow.spacing()) * 0.215);
+            coord_t minimum_line = scaled(std::max(perimeter_generator.layer_height, double(perimeter_generator.ext_perimeter_flow.spacing())) * 0.215);
             for (auto ej : extrusion->junctions) {
                 if (ej.perimeter_index < 100000) {
                     el_extrusion.junctions.emplace_back(ej);
