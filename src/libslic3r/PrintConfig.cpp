@@ -186,6 +186,18 @@ static t_config_enum_values s_keys_map_NoiseType {
 };
 CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(NoiseType)
 
+static t_config_enum_values s_keys_map_CornerType {
+    { "auto",           int(CornerType::Auto) },
+    { "groove",         int(CornerType::Groove) },
+    { "cut",            int(CornerType::Cut) },
+    { "trapezoid",      int(CornerType::Trapezoid) },
+    { "spike",          int(CornerType::Spike) },
+    { "full",           int(CornerType::Full) },
+    { "round",          int(CornerType::Round) },
+    { "none",           int(CornerType::None) }
+};
+CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(CornerType)
+
 static t_config_enum_values s_keys_map_FuzzySkinMode {
     { "displacement",   int(FuzzySkinMode::Displacement) },
     { "displacement+",  int(FuzzySkinMode::Displacement_plus) },
@@ -3238,7 +3250,7 @@ void PrintConfigDef::init_fff_params()
     def->tooltip = L("The width within which to jitter. It's advised to be below outer wall line width.");
     def->sidetext = L("mm");	// milimeters, CIS languages need translation
     def->min = 0;
-    def->max = 1;
+    def->max = 2;
     def->mode = comSimple;
     def->set_default_value(new ConfigOptionFloat(0.2));
 
@@ -3307,6 +3319,30 @@ void PrintConfigDef::init_fff_params()
     def->enum_labels.push_back(L("Voronoi"));
     def->mode = comSimple;
     def->set_default_value(new ConfigOptionEnum<NoiseType>(NoiseType::Classic));
+
+    def = this->add("corner_type", coEnum);
+    def->label = L("Fuzzy skin corner type");
+    def->category = L("Others");
+    def->tooltip = L("Corner type for fuzzy skin.\n");
+    def->enum_keys_map = &ConfigOptionEnum<CornerType>::get_enum_values();
+    def->enum_values.push_back("auto");
+    def->enum_values.push_back("groove");
+    def->enum_values.push_back("cut");
+    def->enum_values.push_back("trapeziod");
+    def->enum_values.push_back("spike");
+    def->enum_values.push_back("full");
+    def->enum_values.push_back("round");
+    def->enum_values.push_back("none");
+    def->enum_labels.push_back(L("Auto"));
+    def->enum_labels.push_back(L("Groove"));
+    def->enum_labels.push_back(L("Cut"));
+    def->enum_labels.push_back(L("Trapezoid"));
+    def->enum_labels.push_back(L("Spike"));
+    def->enum_labels.push_back(L("Full"));
+    def->enum_labels.push_back(L("Round"));
+    def->enum_labels.push_back(L("None"));
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionEnum<CornerType>(CornerType::Auto));
 
     def = this->add("fuzzy_skin_scale", coFloat);
     def->label = L("Fuzzy skin feature size");
