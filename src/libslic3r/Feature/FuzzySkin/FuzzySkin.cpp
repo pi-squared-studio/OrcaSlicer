@@ -296,15 +296,18 @@ void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice
         const double  _semithick = p1.w * 0.5;           // half of thickness
         size_t        _index     = p1.perimeter_index;
         
+        p0p1  = (p1.p - p0->p);
+        _vect = Vec2d(p0p1.cast<double>().normalized()); // line vector
+        
         // Orca: only skip the first point for closed path, open path should not skip any point
         if (closed) {
             if (p0->p == p1.p) { // Connect endpoints.
-                out.emplace_back(p1.p, p1.w, p1.perimeter_index);
+                out_point(_vect, p1, _params);
+                //out.emplace_back(p1.p, p1.w, p1.perimeter_index);
                 continue;
             }
+        }
 
-        p0p1  = (p1.p - p0->p);
-        _vect = Vec2d(p0p1.cast<double>().normalized()); // line vector
         Vec2d   _perp(perp(_vect));                      // perpendicular vector of p0p1
         double  p0p1_size = p0p1.norm();
         double  p0pa_dist = dist_left_over;
