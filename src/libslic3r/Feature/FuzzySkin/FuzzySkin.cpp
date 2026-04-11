@@ -315,13 +315,15 @@ void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice
         if (p0pa_dist > p0p1_size) {
             pa = p0->p + (p0p1 * 0.5).cast<coord_t>();
             _params.params[0] = _overall + p0p1_size / 2.;
-            out_point(_vect, &Arachne::ExtrusionJunction(pa, _thick, _index), _params);
+            Arachne::ExtrusionJunction j(pa, _thick, _index);
+            out_point(_vect, &j, _params);
             p0pa_dist = p0p1_size / 2.;
         } else
             for (; p0pa_dist < p0p1_size; p0pa_dist += min_dist_between_points + random_value() * range_random_point_dist) {
                 pa = p0->p + (p0p1 * (p0pa_dist / p0p1_size)).cast<coord_t>();
                 _params.params[0] = _overall + p0pa_dist;
-                out_point(_vect, &Arachne::ExtrusionJunction(pa, _thick, _index), _params);
+                Arachne::ExtrusionJunction j(pa, _thick, _index);
+                out_point(_vect, &j, _params);
             }
         _overall += p0p1_size;
 
@@ -376,13 +378,15 @@ void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice
                         p0p1_size = _rs;
                         for (; p0pa_dist < p0p1_size; p0pa_dist += min_dist_between_points + random_value() * range_random_point_dist) {
                             _params.params[0] = _overall + p0pa_dist;
-                            out_point(_vect, &Arachne::ExtrusionJunction(p1.p + (_vect * p0pa_dist).cast<coord_t>(), _thick, _index), _params);
+                            Arachne::ExtrusionJunction j(p1.p + (_vect * p0pa_dist).cast<coord_t>(), _thick, _index);
+                            out_point(_vect, &j, _params);
                         }
                         p0pa_dist -= p0p1_size;
                         p0p1_size = _re;
                         for (; p0pa_dist < p0p1_size; p0pa_dist += min_dist_between_points + random_value() * range_random_point_dist) {
                             _params.params[0] = _overall + p0pa_dist;
-                            out_point(_vect2, &Arachne::ExtrusionJunction(p1.p + (_vect2 * (p0pa_dist - p0p1_size)).cast<coord_t>(), _thick, _index), _params);
+                            Arachne::ExtrusionJunction j(p1.p + (_vect2 * (p0pa_dist - p0p1_size)).cast<coord_t>(), _thick, _index);
+                            out_point(_vect2, &j, _params);
                         }
                         _params.draw_fill = true;
                     }
