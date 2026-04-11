@@ -112,23 +112,91 @@ void fuzzy_polyline(Points& poly, bool closed, coordf_t slice_z, const FuzzySkin
         poly = std::move(out);
 }
 
+// internal fuzzy skin parameters
+struct FuzzySkinParams
+{
+    Arachne::ExtrusionJunctions& out;
+    Arachne::ExtrusionJunctions& out2;
+    FuzzySkinMode                current_mode;
+    CornerType                   current_corner_type;
+    const FuzzySkinConfig&       cfg;
+    double                       z;
+    bool                         unsym; // unsymmetric skin (true = Displacement+, Combined)
+    noise::module::Module&       noise;
+    coord_t                      params[3] = {0, 0, 0};
+    bool                         draw_fill = true;
+    bool                         draw_line = true;
+};
+
+#define M_2PI (M_PI * 2.)         // can move it to a common functions section
+auto constrainPI = [](double x) { // can move it to a common functions section
+    while (x < 0.)
+        x += M_2PI;
+    return fmod(x + M_PI, M_2PI) - M_PI;
+};
+
 template<typename T>
 double get_noise_value(noise::module::Module& noise, T& point, double z, bool unsym) {
     return unsym ? noise.GetValue(unscale_(point.x()), unscale_(point.y()), z) * .5 + .5 :
                    noise.GetValue(unscale_(point.x()), unscale_(point.y()), z);
 };
 
+// Defining the function for drawing a new fuzzy point in the line
+void out_point(Vec2d vector, Arachne::ExtrusionJunction& j, FuzzySkinParams& p) {
+    const Vec2d   _perp(perp(vector));
+    const coord_t _semithick = j.w / 2;
+    double        dist       = get_noise_value(p.noise, j.p, p.z, p.unsym);
+    switch (p.current_mode) {
+    case FuzzySkinMode::Displacement: // classical algorithm, no any changed, two-way expansion
+        p.out.emplace_back(j.p + (_perp * dist * p.cfg.thickness).cast<coord_t>(), j.w, j.perimeter_index);
+        break;
+    case FuzzySkinMode::Displacement_plus: // classical algorithm, one-way expansion
+        dist *= p.cfg.thickness;
+        if (p.draw_line)
+            p.out.emplace_back(j.p + (_perp * dist).cast<coord_t>(), j.w, j.perimeter_index);
+        if (p.draw_fill) {
+            if (p.cfg.noise_type == NoiseType::Voronoi && scale_(p.cfg.noise_scale) > j.w * 3.) {
+                Point  point_n = j.p - (vector * j.w).cast<coord_t>();
+                Point  point_p = j.p + (vector * j.w).cast<coord_t>();
+                double dist2   = std::min(get_noise_value(p.noise, point_n, p.z, p.unsym), get_noise_value(p.noise, point_p, p.z, p.unsym));
+                dist           = std::min(dist, dist2 * p.cfg.thickness);
+            }
+        } else
+            dist = 0.;
+        if (dist < j.w * 2.5) { // conditions for determining when a wide line or snake is filled
+            p.out2.emplace_back(j.p + (_perp * (dist / 2. - _semithick)).cast<coord_t>(), dist, -1);
+        } else {
+            coord_t _counter = p.params[0] / j.w;
+            if (_counter != p.params[1]) {
+                p.params[1] = _counter;
+                if (p.params[2]++ % 2)
+                    p.out2.emplace_back(j.p, j.w, -1);
+                else
+                    p.out2.emplace_back(j.p + (_perp * std::max(dist - j.w, 0.)).cast<coord_t>(), j.w, -1);
+            }
+        }
+        break;
+    case FuzzySkinMode::Extrusion: p.out.emplace_back(j.p, dist * (vector.norm() * p.cfg.thickness + j.w), j.perimeter_index); break;
+    case FuzzySkinMode::Combined:
+        dist *= p.cfg.thickness + j.w;
+        p.out.emplace_back(j.p + (_perp * (dist / 2 - _semithick)).cast<coord_t>(), dist, j.perimeter_index);
+        break;
+    case FuzzySkinMode::Fur:
+        dist *= p.cfg.thickness;
+        coord_t _counter = p.params[0] / p.cfg.point_distance;
+        if (_counter != p.params[1]) {
+            p.params[1] = _counter;
+            p.out.emplace_back(++p.params[2] % 2 ? (p.unsym ? j.p : j.p + (_perp * -dist).cast<coord_t>()) :
+                                                   j.p + (_perp * dist).cast<coord_t>(),
+                               p.cfg.point_distance < j.w ? p.cfg.point_distance / 2. : j.w, j.perimeter_index);
+        }
+        break;
+    }
+};
+
 // Thanks Cura developers for this function.
 void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice_z, const FuzzySkinConfig& cfg, bool closed)
 {
-
-#define M_2PI (M_PI * 2.)             // can move it to a common functions section
-    auto constrainPI = [](double x) { // can move it to a common functions section
-        while (x < 0.)
-            x += M_2PI;
-        return fmod(x + M_PI, M_2PI) - M_PI;
-    };
-
     std::unique_ptr<noise::module::Module> noise = get_noise_module(cfg);
 
     if (ext_lines.size() < 2 || (
@@ -137,21 +205,6 @@ void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice
         cfg.mode == FuzzySkinMode::Combined || 
         cfg.mode == FuzzySkinMode::Fur)))
         return;
-
-    // internal fuzzy skin parameters
-    struct FuzzySkinParams {
-        Arachne::ExtrusionJunctions& out;
-        Arachne::ExtrusionJunctions& out2;
-        FuzzySkinMode                current_mode;
-        CornerType                   current_corner_type;
-        const FuzzySkinConfig&       cfg;
-        double                       z;
-        bool                         unsym; // unsymmetric skin (true = Displacement+, Combined)
-        noise::module::Module&       noise;
-        coord_t                      params[3] = {0, 0, 0};
-        bool                         draw_fill = true; 
-        bool                         draw_line = true; 
-    };
 
     Arachne::ExtrusionJunctions out, out2; // out2 - additional complex contour for some modes
     out.reserve(ext_lines.size());
@@ -166,62 +219,6 @@ void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice
     double dist_left_over = random_value() * (min_dist_between_points / 2.);             // the distance to be traversed on the line before making the first new point
     coord_t minimal_line  = cfg.minimal_line;                                            // Minimal linewidth for this condition for height and spacing: parsms * float(1. - 0.25 * PI);
     coord_t _overall      = random_value() * _distance;                                  // first random point for Fur and Displacement+ infill 
-
-    // Defining the function for drawing a new fuzzy line
-    auto out_point = [](Vec2d vector, Arachne::ExtrusionJunction& j, FuzzySkinParams& p) {
-        const Vec2d _perp(perp(vector));
-        const coord_t _semithick = j.w / 2;
-        double        dist       = get_noise_value(p.noise, j.p, p.z, p.unsym);
-        switch (p.current_mode) {
-        case FuzzySkinMode::Displacement:       // classical algorithm, no any changed, two-way expansion
-            p.out.emplace_back(j.p + (_perp * dist * p.cfg.thickness).cast<coord_t>(), j.w, j.perimeter_index);
-            break;
-        case FuzzySkinMode::Displacement_plus:  // classical algorithm, one-way expansion
-            dist *= p.cfg.thickness;
-            if (p.draw_line)
-                p.out.emplace_back(j.p + (_perp * dist).cast<coord_t>(), j.w, j.perimeter_index);
-            if (p.draw_fill) {
-                if (p.cfg.noise_type == NoiseType::Voronoi && scale_(p.cfg.noise_scale) > j.w * 3.) {
-                    Point  point_n = j.p - (vector * j.w).cast<coord_t>();
-                    Point  point_p = j.p + (vector * j.w).cast<coord_t>();
-                    double dist2   = std::min(get_noise_value(p.noise, point_n, p.z, p.unsym),
-                                              get_noise_value(p.noise, point_p, p.z, p.unsym));
-                    dist = std::min(dist, dist2 * p.cfg.thickness);
-                }
-            } else
-                dist = 0.;
-            if (dist < j.w * 2.5) { // conditions for determining when a wide line or snake is filled
-                p.out2.emplace_back(j.p + (_perp * (dist / 2. - _semithick)).cast<coord_t>(), dist, -1);
-            } else {
-                coord_t _counter = p.params[0] / j.w;
-                if (_counter != p.params[1]) {
-                    p.params[1] = _counter;
-                    if (p.params[2]++ % 2)
-                        p.out2.emplace_back(j.p, j.w, -1);
-                    else
-                        p.out2.emplace_back(j.p + (_perp * std::max(dist - j.w, 0.)).cast<coord_t>(), j.w, -1);
-                }
-            }
-            break;
-        case FuzzySkinMode::Extrusion: p.out.emplace_back(j.p, dist * (vector.norm() * p.cfg.thickness + j.w), j.perimeter_index);
-            break;
-        case FuzzySkinMode::Combined:
-            dist *= p.cfg.thickness + j.w;
-            p.out.emplace_back(j.p + (_perp * (dist / 2 - _semithick)).cast<coord_t>(), dist, j.perimeter_index);
-            break;
-        case FuzzySkinMode::Fur:
-            dist *= p.cfg.thickness;
-            coord_t _counter = p.params[0] / p.cfg.point_distance;
-            if (_counter != p.params[1]) {
-                p.params[1] = _counter;
-                p.out.emplace_back(++p.params[2] % 2 ? (
-                                   p.unsym ? j.p : j.p + (_perp * -dist).cast<coord_t>()) :
-                                   j.p + (_perp * dist).cast<coord_t>(),
-                                   p.cfg.point_distance < j.w ? p.cfg.point_distance / 2. : j.w, j.perimeter_index);
-            }
-            break;
-        }
-    };
 
     // Start for Fur
     if (_params.unsym && _is_random) {
