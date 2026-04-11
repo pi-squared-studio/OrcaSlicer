@@ -142,7 +142,8 @@ double get_noise_value(noise::module::Module& noise, T& point, double z, bool un
 };
 
 // Defining the function for drawing a new fuzzy point in the line
-void out_point(Vec2d vector, Arachne::ExtrusionJunction& j, FuzzySkinParams& p) {
+template<typename T>
+void out_point(Vec2d vector, T j, FuzzySkinParams& p) {
     const Vec2d   _perp(perp(vector));
     const coord_t _semithick = j.w / 2;
     double        dist       = get_noise_value(p.noise, j.p, p.z, p.unsym);
