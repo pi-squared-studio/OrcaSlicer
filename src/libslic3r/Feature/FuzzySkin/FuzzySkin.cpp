@@ -121,7 +121,7 @@ struct FuzzySkinParams
     CornerType                   current_corner_type;
     const FuzzySkinConfig&       cfg;
     double                       z;
-    bool                         unsym; // unsymmetric skin (true = Displacement+, Combined)
+    bool                         one_way_expansion; // one_way_expansionmetric skin (true = Displacement+, Combined)
     noise::module::Module&       noise;
     coord_t                      params[3] = {0, 0, 0};
     bool                         draw_fill = true;
@@ -136,16 +136,25 @@ auto constrainPI = [](double x) { // can move it to a common functions section
 };
 
 template<typename T>
-double get_noise_value(noise::module::Module& noise, T& point, double z, bool unsym) {
-    return unsym ? noise.GetValue(unscale_(point.x()), unscale_(point.y()), z) * .5 + .5 :
+double get_noise_value(noise::module::Module& noise, T& point, double z, bool one_way_expansion) {
+    return one_way_expansion ? noise.GetValue(unscale_(point.x()), unscale_(point.y()), z) * .5 + .5 :
                    noise.GetValue(unscale_(point.x()), unscale_(point.y()), z);
 };
 
 // Defining the function for drawing a new fuzzy line
+// vector - a variable that determines the direction of the passing line.
+//          The fuzzy range is set in the perpendicular direction as usual.
+//          The length of the vector must be normalized to 1. If the value is different, the offset coefficient is set.
+// j      - Extrusion Junction point with coordinates, thickness and index. The index is a serial number of the wall.
+//          The index changes for complex lines or void fillers, if they are generated (< 0 or > 99999).
+//          Complex lines will be printed with the inner walls parameters before printing the outer wall.
+// p      - additional parameters of Fuzzy Skin
+
 void out_point(Vec2d vector, Arachne::ExtrusionJunction* j, FuzzySkinParams& p) {
     const Vec2d   _perp(perp(vector));
     const coord_t _semithick = j->w / 2;
-    double        dist       = get_noise_value(p.noise, j->p, p.z, p.unsym);
+    double        dist       = get_noise_value(p.noise, j->p, p.z, p.one_way_expansion);
+    coord_t       _counter;
     switch (p.current_mode) {
     case FuzzySkinMode::Displacement: // classical algorithm, no any changed, two-way expansion
         p.out.emplace_back(j->p + (_perp * dist * p.cfg.thickness).cast<coord_t>(), j->w, j->perimeter_index);
@@ -153,27 +162,27 @@ void out_point(Vec2d vector, Arachne::ExtrusionJunction* j, FuzzySkinParams& p) 
     case FuzzySkinMode::Displacement_plus: // classical algorithm, one-way expansion
         dist *= p.cfg.thickness;
         if (p.draw_line)
-            p.out.emplace_back(j->p + (_perp * dist).cast<coord_t>(), j->w, j->perimeter_index);
+            p.out.emplace_back(j->p + (_perp * dist).cast<coord_t>(), p.cfg.wall_width, j->perimeter_index);
         if (p.draw_fill) {
             if (p.cfg.noise_type == NoiseType::Voronoi && scale_(p.cfg.noise_scale) > j->w * 3.) {
                 Point  point_n = j->p - (vector * j->w).cast<coord_t>();
                 Point  point_p = j->p + (vector * j->w).cast<coord_t>();
-                double dist2   = std::min(get_noise_value(p.noise, point_n, p.z, p.unsym), get_noise_value(p.noise, point_p, p.z, p.unsym));
+                double dist2   = std::min(get_noise_value(p.noise, point_n, p.z, p.one_way_expansion), get_noise_value(p.noise, point_p, p.z, p.one_way_expansion));
                 dist           = std::min(dist, dist2 * p.cfg.thickness);
             }
         } else
             dist = 0.;
-        if (dist < j->w * 2.5) { // conditions for determining when a wide line or snake is filled
-            p.out2.emplace_back(j->p + (_perp * (dist / 2. - _semithick)).cast<coord_t>(), dist, -1);
-        } else {
-            coord_t _counter = p.params[0] / j->w;
-            if (_counter != p.params[1]) {
-                p.params[1] = _counter;
-                if (p.params[2]++ % 2)
-                    p.out2.emplace_back(j->p, j->w, -1);
-                else
-                    p.out2.emplace_back(j->p + (_perp * std::max(dist - j->w, 0.)).cast<coord_t>(), j->w, -1);
-            }
+        _counter = p.params[0] / j->w;
+        if (dist < p.cfg.minimal_line)
+            p.out2.emplace_back(j->p, 0, -1);
+        else if (_counter != p.params[1]) {
+            p.params[1] = _counter;
+            if (dist < j->w * 2.5)  // conditions for determining when a wide line or snake is filled
+                p.out2.emplace_back(j->p + (_perp * (dist / 2. - _semithick)).cast<coord_t>(),  dist, -1);
+            else if (p.params[2]++ % 2)
+                p.out2.emplace_back(j->p, j->w, -1);
+            else
+                p.out2.emplace_back(j->p + (_perp * std::max(dist - j->w, 0.)).cast<coord_t>(), j->w, -1);
         }
         break;
     case FuzzySkinMode::Extrusion: p.out.emplace_back(j->p, dist * (vector.norm() * p.cfg.thickness + j->w), j->perimeter_index); break;
@@ -183,55 +192,88 @@ void out_point(Vec2d vector, Arachne::ExtrusionJunction* j, FuzzySkinParams& p) 
         break;
     case FuzzySkinMode::Fur:
         dist *= p.cfg.thickness;
-        coord_t _counter = p.params[0] / p.cfg.point_distance;
+        _counter = p.params[0] / p.cfg.point_distance;
         if (_counter != p.params[1]) {
             p.params[1] = _counter;
-            p.out.emplace_back(++p.params[2] % 2 ? (p.unsym ? j->p : j->p + (_perp * -dist).cast<coord_t>()) :
-                                                   j->p + (_perp * dist).cast<coord_t>(),
-                               p.cfg.point_distance < j->w ? p.cfg.point_distance / 2. : j->w, j->perimeter_index);
+            p.out.emplace_back(++p.params[2] % 2 ? (p.one_way_expansion ? j->p : j->p + (_perp * -dist).cast<coord_t>()) : j->p + (_perp * dist).cast<coord_t>(),
+                               p.cfg.point_distance < p.cfg.wall_width ? p.cfg.point_distance / 2. : p.cfg.wall_width, j->perimeter_index);
         }
         break;
     }
 };
 
+// The procedure for filtering lines through a shaded polygon
+Arachne::ExtrusionJunctions fuzzy_filter_by_polygon(Arachne::ExtrusionJunctions out) {
+    Arachne::ExtrusionJunctions out2;
+    coord_t                     w(out.front().w);
+    coord_t                     pi(out.front().perimeter_index);
+    Polyline                    _pl;
+
+    for (auto& point : out) // convert topolyline
+        _pl.points.emplace_back(point.p);
+    _pl.simplify(scaled(EPSILON));
+
+    ExPolygons _expgs = union_ex(to_polygons({_pl}));
+    ExPolygon  _expg;
+    for (auto& expg : _expgs)
+        if (_expg.contour.length() < expg.contour.length())
+            _expg = std::move(expg);
+
+    for (auto& point : _expg.contour)
+        out2.emplace_back(Arachne::ExtrusionJunction(point, w, pi));
+
+    if (out2.size() > 2) {
+        out2.push_back(out2.front());
+        std::reverse(out2.begin(), out2.end());
+    }
+    
+    return out2;
+};
+
 // Thanks Cura developers for this function.
 void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice_z, const FuzzySkinConfig& cfg, bool closed)
 {
-    std::unique_ptr<noise::module::Module> noise = get_noise_module(cfg);
+    size_t  c_size   = ext_lines.size();
+    coord_t _overall = 0;
 
-    if (ext_lines.size() < 2 || (
-        ext_lines[0].perimeter_index > 0 && (
+    bool _is_loop = ext_lines.front().p.distance_to(ext_lines.back().p) < cfg.wall_width; // determinate a closed line
+
+    if (_is_loop) { // filter and close loop if necessary
+        // Randomize start point for minimise some undesired occurs
+        ext_lines.pop_back();
+        std::rotate(ext_lines.begin(), ext_lines.begin() + random_value() * (c_size - 1), ext_lines.end());
+        ext_lines.push_back(ext_lines.front());
+    }
+
+    for (int _it = 1; _it < c_size; _it++)  // calculate polyline length
+        _overall += (ext_lines[_it].p - ext_lines[_it - 1].p).norm();
+
+    if (c_size < (_is_loop ? 3 : 2) || _overall < cfg.point_distance || //return if the line too short or has undesired index
+        (ext_lines[0].perimeter_index > 0 && (
         cfg.mode == FuzzySkinMode::Displacement_plus || 
         cfg.mode == FuzzySkinMode::Combined || 
         cfg.mode == FuzzySkinMode::Fur)))
         return;
+        
+    Arachne::ExtrusionJunctions out, out2; // out2 - additional complex contour (voids infill) for some modes
+    size_t _cap = _overall * 3 / cfg.point_distance + c_size * 8;
+    out.reserve(_cap);
+    out2.reserve(cfg.mode == FuzzySkinMode::Displacement_plus ? _cap : c_size);
 
-    Arachne::ExtrusionJunctions out, out2; // out2 - additional complex contour for some modes
-    out.reserve(ext_lines.size());
-    out2.reserve(ext_lines.size());
-
-    FuzzySkinParams _params{out, out2, cfg.mode, cfg.corner_type, cfg, slice_z, ext_lines.back().p == ext_lines.front().p, *noise};
-    const bool    _is_random    = cfg.noise_type == NoiseType::Classic || _params.current_mode == FuzzySkinMode::Fur;
-    const double  _distance     = cfg.point_distance;
+    const bool      _is_random    = cfg.noise_type == NoiseType::Classic || cfg.mode == FuzzySkinMode::Fur;
+    const double    _distance     = cfg.point_distance;
+    const bool      _one_way      = cfg.mode == FuzzySkinMode::Displacement_plus || cfg.mode == FuzzySkinMode::Combined || cfg.mode == FuzzySkinMode::Fur;
+    std::unique_ptr<noise::module::Module> noise = get_noise_module(cfg);
+    FuzzySkinParams _params{out, out2, cfg.mode, cfg.corner_type, cfg, slice_z, _one_way, *noise};
 
     const double min_dist_between_points = _is_random ? _distance * 3. / 4. : _distance; // hardcoded: the point distance may vary between 3/4 and 5/4 the supplied value
     const double range_random_point_dist = _is_random ? _distance / 2. : 0.;             // _is_random ? ... - disabled for the test function of precise corners when using 3D noise
     double dist_left_over = random_value() * (min_dist_between_points / 2.);             // the distance to be traversed on the line before making the first new point
     coord_t minimal_line  = cfg.minimal_line;                                            // Minimal linewidth for this condition for height and spacing: parsms * float(1. - 0.25 * PI);
-    coord_t _overall      = random_value() * _distance;                                  // first random point for Fur and Displacement+ infill 
-
-    // Start for Fur
-    if (_params.unsym && _is_random) {
-        // randomize start point for loops
-        ext_lines.pop_back();
-        std::rotate(ext_lines.begin(), ext_lines.begin() + std::rand() * (ext_lines.size() - 1) / RAND_MAX, ext_lines.end());
-        ext_lines.push_back(ext_lines[0]);
-    }
+    _overall = std::rand() * _distance;                                                  // Use this var for length calc. Determinate first random point for Fur and Displacement+ infill 
 
     // Get angles map for negative values for loops filter and positive ones for corner former
-    const int  c_size = ext_lines.size();
     std::vector<double> corners(c_size, 0.);
-    corners.reserve(c_size);
     double _last_angle = 0;
     for (int _i = 0; _i < c_size - 1; _i++) {
         Point  _p     = (ext_lines[_i + 1].p - ext_lines[_i].p);
@@ -239,31 +281,27 @@ void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice
         corners[_i]   = constrainPI(_angle - _last_angle);
         _last_angle   = _angle;
     }
-    if (_params.unsym) {
+
+    if (_is_loop) {
         corners[0] = corners[c_size - 1] = constrainPI(corners[0] - _last_angle);
     } else {
         corners[0] = corners[c_size - 1] = 0.;
         // Set a bypass for non-closed paths
-        if (_params.current_mode == FuzzySkinMode::Displacement_plus) {
-            _params.unsym = false;
-            _params.current_mode = FuzzySkinMode::Displacement;
-        }
-        if (_params.current_mode == FuzzySkinMode::Combined) {
-            _params.unsym = false;
-            _params.current_mode = FuzzySkinMode::Extrusion;
-        }
+        //if (_params.current_mode == FuzzySkinMode::Displacement_plus) {
+        //    _params.one_way_expansion = false;
+        //    _params.current_mode = FuzzySkinMode::Displacement;
+        //}
+        //if (_params.current_mode == FuzzySkinMode::Combined) {
+        //    _params.one_way_expansion = false;
+        //    _params.current_mode = FuzzySkinMode::Extrusion;
+        //}
     }
 
     switch (_params.current_mode) {
     case FuzzySkinMode::Displacement: // classical algorithm, no any changed, two-way expansion
-        _params.unsym = false;
+        _params.one_way_expansion = false;
         break;
     }
-
-    // Reverse for unlooped lines
-    //if (!_params.unsym) {
-    //    std::reverse(ext_lines.begin(), ext_lines.end());
-    //}
 
     // Automatic corner shaper for certain types of fuzzy lines
     if (_params.cfg.corner_type == CornerType::Auto) {
@@ -282,42 +320,39 @@ void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice
 
     // Fuzzy line segment former
     Arachne::ExtrusionJunction* p0   = &ext_lines.front();
-    Point                       p0p1 = (ext_lines[1].p - p0->p);
-    Vec2d _vect(p0p1.cast<double>().normalized()); // line vector
-    _params.params[0] = _overall;
-    out_point(_vect, p0, _params);
-    Point pa(p0->p); // 'a' is the (next) new point between p0 and p1
+    Point p0p1, pa;
+    Vec2d _vect, _perp;                                         // line vector
     for (int _it = 1; _it < c_size; _it++) {
-        Arachne::ExtrusionJunction& p1(ext_lines[_it]);
-        const double  _thick     = p1.w;                 // thickness alias
-        const double  _semithick = p1.w * 0.5;           // half of thickness
-        size_t        _index     = p1.perimeter_index;
         
+        Arachne::ExtrusionJunction& p1(ext_lines[_it]);
+        const double  _thick     = p1.w;                        // thickness alias
+        size_t        _index     = p1.perimeter_index;
         p0p1  = (p1.p - p0->p);
-        _vect = Vec2d(p0p1.cast<double>().normalized()); // line vector
+        pa    = p0->p;                                          // 'a' is the (next) new point between p0 and p1
+        _vect = Vec2d(p0p1.cast<double>().normalized());        // line vector
+
+        // Bypass processing an unclosed line if the first element is too short to filter out an unwanted corner
+        if (!_is_loop && _it == 1 && (p0p1.norm() < cfg.point_distance))
+            continue;
         
         // Orca: only skip the first point for closed path, open path should not skip any point
-        if (closed) {
-            if (p0->p == p1.p) { // Connect endpoints.
-                out_point(_vect, &p1, _params);
-                //out.emplace_back(p1.p, p1.w, p1.perimeter_index);
-                continue;
-            }
+        if (closed && p0->p == p1.p) {                          // Connect endpoints.
+            out_point(_vect, &p1, _params);
+            continue;
         }
 
-        Vec2d   _perp(perp(_vect));                      // perpendicular vector of p0p1
+        _perp = perp(_vect);                                    // perpendicular vector of p0p1
         double  p0p1_size = p0p1.norm();
         double  p0pa_dist = dist_left_over;
 
         double theta = constrainPI(atan2(_vect.y(), _vect.x()) + corners[_it]);
-        Vec2d _vect2(cos(theta), sin(theta));            // vector of p1p2
+        Vec2d _vect2(cos(theta), sin(theta));                   // vector of p1p2
 
-        if (p0pa_dist > p0p1_size) {
-            pa = p0->p + (p0p1 * 0.5).cast<coord_t>();
-            _params.params[0] = _overall + p0p1_size / 2.;
-            Arachne::ExtrusionJunction j(pa, _thick, _index);
+        if (p0pa_dist > p0p1_size) {                            // for short lines need to build own point
+            p0pa_dist -= p0p1_size;
+            _params.params[0] = _overall + p0pa_dist;
+            Arachne::ExtrusionJunction j(p1.p, _thick, _index);
             out_point(_vect, &j, _params);
-            p0pa_dist = p0p1_size / 2.;
         } else
             for (; p0pa_dist < p0p1_size; p0pa_dist += min_dist_between_points + random_value() * range_random_point_dist) {
                 pa = p0->p + (p0p1 * (p0pa_dist / p0p1_size)).cast<coord_t>();
@@ -325,27 +360,32 @@ void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice
                 Arachne::ExtrusionJunction j(pa, _thick, _index);
                 out_point(_vect, &j, _params);
             }
+
+        // Stop processing an unclosed line if the last element is too short to filter out an unwanted corner
+        if (!_is_loop && (_it == (c_size - 1)) && ((ext_lines[_it + 1].p - p1.p).norm() < cfg.point_distance))
+            break;
+
         _overall += p0p1_size;
 
         // Draw a needed point outside perimeter at visible corner
-        double r_end = get_noise_value(*noise, p1.p, slice_z, _params.unsym) * cfg.thickness;
-        if ((corners[_it] < 0.) != (r_end < 0. && !_params.unsym)) {
-            if (abs(corners[_it]) > M_PI_4 / 2.) {     // for weight angles only
+        double r_end = get_noise_value(*noise, p1.p, slice_z, _params.one_way_expansion) * cfg.thickness;
+        if ((corners[_it] < 0.) != (r_end < 0. && !_params.one_way_expansion)) { // for outside corners only
+            if (abs(corners[_it]) > M_PI_4 / 2.) {                               // for weight angles only
                 double _rs, _re;
                 Vec2d  _vect_d;
                 Vec2d  sec_point;
                 Vec2d  p1p = p1.p.cast<double>();
-                switch (_params.current_corner_type) { // end line point
-                case CornerType::Groove:   // form groove corner
+                switch (_params.current_corner_type) {          // end line point
+                case CornerType::Groove:                        // form groove corner
                     out_point(_vect, &p1, _params);
                     out_point(Vec2d(0., 0.), &p1, _params);
                     out_point(_vect2, &p1, _params);
                     break;
-                case CornerType::Cut:       // form cut corner
+                case CornerType::Cut:                           // form cut corner
                     out_point(_vect, &p1, _params);
                     out_point(_vect2, &p1, _params);
                     break;
-                case CornerType::Trapezoid: // form trapezoid corner
+                case CornerType::Trapezoid:                     // form trapezoid corner
                     p0pa_dist -= p0p1_size;
                     theta = constrainPI(atan2(_vect.y(), _vect.x()) + corners[_it] / 2.);
                     _vect_d   = Vec2d(cos(theta), sin(theta));  // vector of connection line
@@ -357,23 +397,27 @@ void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice
                         out_point(_vect_t, &p1, _params);
                     }
                     break;
-                case CornerType::Spike:     // form full corner
+                case CornerType::Spike:                         // form corner by its vertex
                     theta = constrainPI(atan2(_vect.y(), _vect.x()) + corners[_it] / 2.);
-                    out_point(Vec2d(cos(theta), sin(theta)) / abs(cos(corners[_it] / 2.)), &p1, _params);
+                    if (abs(corners[_it]) > M_PI_4 * 3.)        // for angles greater than 135 degrees, the vertex offset should be limited
+                        out_point(Vec2d(cos(theta), sin(theta)), &p1, _params);
+                    else 
+                        out_point(Vec2d(cos(theta), sin(theta)) / abs(cos(corners[_it] / 2.)), &p1, _params);
                     break;
-                case CornerType::Full:      // form full corner
+                case CornerType::Full:                          // form full corner
                     _params.draw_fill = true;
-                    if (p0p1_size < cfg.thickness || (ext_lines[_it < c_size - 1 ? _it : 1].p - p1.p).norm() < cfg.thickness) {
-                        if (abs(corners[_it]) < M_PI_4 * 3.) {
-                            theta = constrainPI(atan2(_vect.y(), _vect.x()) + corners[_it] / 2.);
-                            _params.params[0] = _overall + p0pa_dist;
+                    if (p0p1_size < cfg.point_distance ) {      // for small segments || (ext_lines[_it < c_size - 1 ? _it : 1].p - p1.p).norm() < cfg.point_distance
+                        theta = constrainPI(atan2(_vect.y(), _vect.x()) + corners[_it] / 2.);
+                        _params.params[0] = _overall + p0pa_dist;
+                        if (abs(corners[_it]) > M_PI_4 * 3.)    // for angles greater than 135 degrees, the vertex offset should be limited
+                            out_point(Vec2d(cos(theta), sin(theta)), &p1, _params);
+                        else 
                             out_point(Vec2d(cos(theta), sin(theta)) / abs(cos(corners[_it] / 2.)), &p1, _params);
-                        }
                     } else {
                         p0pa_dist -= p0p1_size;
                         double _tan_end = tan(corners[_it] / 2.);
-                        _rs = abs(_tan_end) * get_noise_value(*noise, p1.p - (_vect2 * cfg.thickness).cast<coord_t>(), slice_z, _params.unsym) * cfg.thickness;
-                        _re = abs(_tan_end) * get_noise_value(*noise, p1.p + (_vect * cfg.thickness).cast<coord_t>(), slice_z, _params.unsym) * cfg.thickness;
+                        _rs = abs(_tan_end) * get_noise_value(*noise, p1.p - (_vect2 * cfg.thickness).cast<coord_t>(), slice_z, _params.one_way_expansion) * cfg.thickness;
+                        _re = abs(_tan_end) * get_noise_value(*noise, p1.p + (_vect * cfg.thickness).cast<coord_t>(), slice_z, _params.one_way_expansion) * cfg.thickness;
                         _params.draw_fill = false;
                         p0p1_size = _rs;
                         for (; p0pa_dist < p0p1_size; p0pa_dist += min_dist_between_points + random_value() * range_random_point_dist) {
@@ -391,7 +435,7 @@ void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice
                         _params.draw_fill = true;
                     }
                     break;
-                case CornerType::Round: // form round corner
+                case CornerType::Round:                         // form round corner
                     p0pa_dist -= p0p1_size;
                     p0p1_size = abs(corners[_it] * r_end);
                     for (; p0pa_dist < p0p1_size; p0pa_dist += min_dist_between_points + random_value() * range_random_point_dist) {
@@ -402,6 +446,10 @@ void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice
                     }
                     break;
                 }
+            } else {
+                theta = constrainPI(atan2(_vect.y(), _vect.x()) + corners[_it] / 2.);
+                _params.params[0] = _overall + p0pa_dist;
+                out_point(Vec2d(cos(theta), sin(theta)) / abs(cos(corners[_it] / 2.)), &p1, _params);
             }
         }
         
@@ -410,49 +458,11 @@ void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice
     }
 
     // Finish for Fur
-    if (_params.unsym && _is_random) {
-        out_point(Vec2d(0, 0), &ext_lines.front(), _params);
-    }
-
-    // The procedure for filtering lines through a shaded polygon
-    auto fuzzy_filter_by_polygon = [](Arachne::ExtrusionJunctions out) {
-        Arachne::ExtrusionJunctions out2;
-        coord_t w(out.front().w);
-        coord_t pi(out.front().perimeter_index);
-        Polyline _pl;
-
-        for (auto& point : out) // convert topolyline
-            _pl.points.emplace_back(point.p);
-        _pl.simplify(scaled(EPSILON));
-        
-        ExPolygons _expgs = union_ex(to_polygons({_pl}));
-        ExPolygon _expg;
-        for (auto& expg : _expgs)
-            if (_expg.contour.length() < expg.contour.length())
-                _expg = std::move(expg);
-
-        for (auto& point : _expg.contour) 
-            out2.emplace_back(Arachne::ExtrusionJunction(point, w, pi));
-        
-        return out2;
-    };
-
-    while (out.size() < 3) {
-        size_t point_idx = ext_lines.size() - 2;
-        out.emplace_back(ext_lines[point_idx].p, ext_lines[point_idx].w, ext_lines[point_idx].perimeter_index);
-        if (point_idx == 0)
-            break;
-        --point_idx;
-    }
+    //if (_is_loop && _is_random) 
+    //    out_point(Vec2d(0, 0), &ext_lines.front(), _params);
 
     for (auto& point : out) // filter thick lines
         point.w = std::max(point.w, minimal_line);
-
-    if (_params.unsym) { // Connect endpoints.
-        out.push_back(out.front());
-        if (out2.size() && out2.front().w == out2.back().w)
-            out2.push_back(out2.front());
-    }
 
     #ifdef DEBUG_FUZZY
     {
@@ -464,7 +474,7 @@ void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice
 
         BoundingBox bbox = get_extents(_tpl);
         bbox.offset(scale_(1.));
-        ::Slic3r::SVG svg(debug_out_path("fuzzy_skin_z%.2f_%d.svg", slice_z, _params.unsym ? 0 : 1).c_str(), bbox);
+        ::Slic3r::SVG svg(debug_out_path("fuzzy_skin_z%.2f_%d.svg", slice_z, _params.one_way_expansion ? 0 : 1).c_str(), bbox);
         svg.draw(_tpl, "red");
 
         _tpl.clear();
@@ -479,8 +489,8 @@ void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice
         _tpl.clear();
         for (auto& point : fuzzy_filter_by_polygon(out)) // filter thick lines
             _tpl.points.emplace_back(point.p);
-        if (_params.unsym)
-            _tpl.points.push_back(_tpl.front()); // close the loop
+        //if (_params.one_way_expansion)
+        //    _tpl.points.push_back(_tpl.front()); // close the loop
         svg.draw(_tpl, "green");
 
         _tpl.clear();
@@ -494,20 +504,30 @@ void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice
 #endif
 
     // filter for equal width lines
-    if (_params.current_mode == FuzzySkinMode::Displacement_plus ||
-            _params.current_mode == FuzzySkinMode::Displacement ||
-            _params.current_mode == FuzzySkinMode::Fur) {
+    if (_is_loop)
         out = fuzzy_filter_by_polygon(out);
-        if (_params.unsym)
-            out.push_back(out.front()); // close the loop
+    else {
+        // Reverse for unlooped lines & connect endpoints.
+        out.back().w = ext_lines.back().w;
+        out.push_back(ext_lines.back());
     }
-    
-    if (out2.size())            // add complex perimeters to out
+
+    if (out2.size() > 2) { // filter ends points
+        for (size_t _i = 0; _i < 2; _i++) {
+            (out2.begin() + _i)->w /= 3 - _i;
+            (out2.rbegin() + _i)->w /= 3 - _i;
+        }
+        Arachne::ExtrusionJunction j(ext_lines.begin()->p, 1, -1);
+        out2.insert(out2.begin(), j);
+        j.p = ext_lines.end()->p;
+        out2.emplace_back(j);
         for (auto point : out2) // copy points from additional contour
             out.emplace_back(point);
+    } else 
+        out2.clear();
 
     // return changes if they has sense
-    if (out.size() >= 3)
+    if (out.size() > 1)
         ext_lines = std::move(out);
 }
 
@@ -519,7 +539,10 @@ void group_region_by_fuzzify(PerimeterGenerator& g)
 
     std::unordered_map<FuzzySkinConfig, SurfacesPtr> regions;
     for (auto region : *g.compatible_regions) {
-        const auto&           region_config = region->region().config();
+        const auto&   region_config = region->region().config();
+        const coord_t _wall_width(scaled<coord_t>((region_config.outer_wall_line_width.value ? 
+                                                  region_config.outer_wall_line_width.value :
+                                                  g.object_config->line_width.value)) * g.print_config->filament_flow_ratio.get_at(g.print_config->master_extruder_id.value));
         const FuzzySkinConfig cfg{region_config.fuzzy_skin,
                                   scaled<coord_t>(region_config.fuzzy_skin_thickness.value),
                                   scaled<coord_t>(region_config.fuzzy_skin_point_distance.value),
@@ -530,6 +553,7 @@ void group_region_by_fuzzify(PerimeterGenerator& g)
                                   region_config.fuzzy_skin_persistence,
                                   region_config.fuzzy_skin_mode,
                                   region_config.corner_type,
+                                  _wall_width,
                                   scaled<coord_t>(std::max(float(g.layer_height), g.ext_perimeter_flow.spacing()) * 0.215)}; // param * (1. - 0.25 * PI)
         auto&                 surfaces = regions[cfg];
         for (const auto& surface : region->slices.surfaces) {

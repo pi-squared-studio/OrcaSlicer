@@ -387,7 +387,7 @@ static ExtrusionEntityCollection traverse_extrusions(const PerimeterGenerator& p
 
         ExtrusionPaths paths, paths_complex; // paths_complex - is a complex pathlines 
         
-        // Orca: detect complex paths and sort it
+        // Orca: detect complex paths and sort its
         if (std::any_of(extrusion->junctions.begin(), extrusion->junctions.end(), [](Arachne::ExtrusionJunction j) {return j.perimeter_index > 100000;})) {
             Arachne::ExtrusionLine el_extrusion(*extrusion);
             el_extrusion.junctions.clear();

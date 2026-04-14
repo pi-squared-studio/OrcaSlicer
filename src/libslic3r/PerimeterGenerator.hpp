@@ -21,7 +21,8 @@ struct FuzzySkinConfig
     int           noise_octaves;
     double        noise_persistence;
     FuzzySkinMode mode;
-    CornerType    corner_type; 
+    CornerType    corner_type;
+    coord_t       wall_width;   // info variable
     coord_t       minimal_line; // info variable, keep it last
 
     bool operator==(const FuzzySkinConfig& r) const
