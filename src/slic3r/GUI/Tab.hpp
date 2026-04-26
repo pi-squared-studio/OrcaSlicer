@@ -43,6 +43,8 @@
 #include "Widgets/CheckBox.hpp" // ORCA
 
 class TabCtrl;
+class ModeSwitchButton;
+class SwitchButton;
 
 namespace Slic3r {
 
@@ -141,7 +143,7 @@ protected:
 
 	//BBS: GUI refactor
 	wxPanel*			m_top_panel;
-	wxStaticText* m_static_title;
+	ScalableButton* m_mode_icon; // ORCA m_static_title replacement
 	wxBoxSizer* m_main_sizer;
 	wxBoxSizer* m_top_sizer;
 	wxBoxSizer* m_top_left_sizer;
@@ -161,8 +163,6 @@ protected:
 
 	wxScrolledWindow*	m_page_view {nullptr};
 	//wxBoxSizer*			m_page_sizer {nullptr};
-
-    //ModeSizer*			m_mode_sizer {nullptr};
 
    	struct PresetDependencies {
 		Preset::Type type	  = Preset::TYPE_INVALID;
@@ -303,7 +303,7 @@ public:
     // 3. propagate changed configuration to the Plater when (m_update_cnt == 0) only
     int                 m_update_cnt = 0;
 
-    SwitchButton *m_mode_view = nullptr;
+	ModeSwitchButton *m_mode_view = nullptr;
     SwitchButton *m_extruder_switch = nullptr;
 
 public:
@@ -592,7 +592,7 @@ class TabPrinter : public Tab
 {
 private:
 	bool		m_use_silent_mode = false;
-	void		append_option_line(ConfigOptionsGroupShp optgroup, const std::string opt_key);
+	void		append_option_line(ConfigOptionsGroupShp optgroup, const std::string opt_key, const std::string& label_path = "");
 	bool		m_rebuild_kinematics_page = false;
 
 	ogStaticText*	m_fff_print_host_upload_description_line {nullptr};
