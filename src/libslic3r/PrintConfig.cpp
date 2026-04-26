@@ -704,6 +704,7 @@ void PrintConfigDef::init_common_params()
     def->sidetext = "%";
     def->min      = 50;
     def->max      = 100;
+    def->mode     = comExpert;
     def->set_default_value(new ConfigOptionPercent(100));
 
     def = this->add("layer_height", coFloat);
