@@ -1583,8 +1583,105 @@ Practical_Flow_Ratio_Test_Dlg::Practical_Flow_Ratio_Test_Dlg(wxWindow* parent, w
 
     wxGetApp().UpdateDlgDarkUI(this);
 
-        Layout();
+    Layout();
     Fit();
+}
+
+Practical_Flow_Ratio_Test_Dlg::~Practical_Flow_Ratio_Test_Dlg() {
+    // Disconnect Events
+}
+
+wxString Practical_Flow_Ratio_Test_Dlg::get_status()
+{
+    auto filament_config = &wxGetApp().preset_bundle->filaments.get_edited_preset().config;
+    wxString addtext     = "\n" + wxString::Format("%s %s filament: fr=%.3f", filament_config->get_filament_vendor(),
+                                                   filament_config->get_filament_type(),
+                                                   filament_config->option<ConfigOptionFloatsNullable>("filament_flow_ratio")->get_at(0))
+                                  .Trim();
+    bool read_double = false;
+    read_double      = m_tiJDStart->GetTextCtrl()->GetValue().ToDouble(&m_params.start);
+    read_double      = read_double && m_tiJDEnd->GetTextCtrl()->GetValue().ToDouble(&m_params.end);
+    if (m_params.end < m_params.start)
+        std::swap(m_params.end, m_params.start);
+    if (!read_double || m_params.start >= 0.5 && m_params.end <= 1.5) {
+        float const calib_scale[3] = {1.0f, 1.5f, 2.0f};
+        float _phi = (m_params.end - m_params.start) * 10 / calib_scale[m_rbModel->GetSelection()];
+        float _ksi;
+        for (_ksi = 1; _ksi < 6; _ksi++) { // Get a nice fractional value
+            float _teta = _phi * _ksi;
+            if (abs(_teta - round(_teta)) < 0.001)
+                break;
+        }
+        if (_ksi > 5)
+            _ksi = 1;
+        else
+            _phi *= _ksi;
+        return wxString::Format(_L("Current meas: %.0fcm = %.2f%% or %.4f"), _ksi, _phi, _phi * 0.01) + addtext;
+    } else {
+        return _L("The value is out of range 0.5~1.5!");
+    }
+}
+
+void Practical_Flow_Ratio_Test_Dlg::on_start(wxCommandEvent& event)
+{
+    bool read_double = false;
+    read_double      = m_tiJDStart->GetTextCtrl()->GetValue().ToDouble(&m_params.start);
+    read_double      = read_double && m_tiJDEnd->GetTextCtrl()->GetValue().ToDouble(&m_params.end);
+
+    if (!read_double || m_params.start < 0.5 || m_params.start > 1.5 || m_params.end < 0.5 || m_params.end > 1.5) {
+        MessageDialog msg_dlg(nullptr, _L("Please input valid values:\n(0.5 <= Flow Ratio <= 1.5)"), wxEmptyString, wxICON_WARNING | wxOK);
+        msg_dlg.ShowModal();
+        return;
+    } else if (!m_tiQuantity->GetTextCtrl()->GetValue().ToDouble(&m_params.step) || m_params.step < 4 || m_params.step > 40) {
+        MessageDialog msg_dlg(nullptr, _L("Please input valid layer value:\n(4 <= Number of Calibration Layers <= 40)"), wxEmptyString,
+                              wxICON_WARNING | wxOK);
+        msg_dlg.ShowModal();
+        return;
+    } else if (m_params.end < m_params.start) {
+        std::swap(m_params.end, m_params.start);
+        MessageDialog msg_dlg(nullptr, _L("NOTE: Parameters has swapped!"), wxEmptyString, wxICON_WARNING | wxOK);
+        msg_dlg.ShowModal();
+    }
+
+    m_params.mode = CalibMode::Calib_Practical_Flow_Ratio;
+
+    // Set model type based on selection
+    m_params.test_model    = m_rbModel->GetSelection();
+    m_params.model_variant = m_rbModelDepth->GetSelection();
+    m_params.interlaced    = m_cbInterlaced->GetValue();
+    m_params.use_zhop      = m_cbUseZHop->GetValue();
+    m_params.print_numbers = m_cbPrintScale->GetValue();
+    m_params.print_ruler   = m_cbPrintRuler->GetValue();
+    double _speed;
+    m_tiSpeed->GetTextCtrl()->GetValue().ToDouble(&_speed);
+    m_params.speeds.clear();
+    m_params.speeds.push_back(_speed);
+    m_plater->Calib_Practical_Flow_Ratio(m_params);
+    EndModal(wxID_OK);
+}
+
+void Practical_Flow_Ratio_Test_Dlg::on_changed(wxCommandEvent& event)
+{
+    m_stNote->SetLabel(get_status());
+    event.Skip();
+}
+
+void Practical_Flow_Ratio_Test_Dlg::on_changed2(wxMouseEvent& event)
+{
+    m_stNote->SetLabel(get_status());
+    event.Skip();
+}
+
+void Practical_Flow_Ratio_Test_Dlg::on_dpi_changed(const wxRect& suggested_rect)
+{
+    this->Refresh();
+    Fit();
+}
+void Practical_Flow_Ratio_Test_Dlg::on_show(wxShowEvent& event) { m_stNote->SetLabel(get_status()); }
+
+FlowRateCalibrationDialog::~FlowRateCalibrationDialog()
+{
+    // Disconnect Events
 }
 
 // FlowRateCalibrationDialog
@@ -1655,97 +1752,6 @@ FlowRateCalibrationDialog::FlowRateCalibrationDialog(wxWindow* parent, wxWindowI
 
     Layout();
     Fit();
-}
-
-Practical_Flow_Ratio_Test_Dlg::~Practical_Flow_Ratio_Test_Dlg() {
-    // Disconnect Events
-}
-
-wxString Practical_Flow_Ratio_Test_Dlg::get_status() {
-    auto     filament_config = &wxGetApp().preset_bundle->filaments.get_edited_preset().config;
-    wxString addtext = "\n" + wxString::Format("%s %s filament: fr=%.3f",
-                                               filament_config->get_filament_vendor(),                                                      
-                                               filament_config->get_filament_type(), 
-                                               filament_config->option<ConfigOptionFloatsNullable>("filament_flow_ratio")->get_at(0)
-                                              ).Trim();
-    bool read_double = false;
-    read_double      = m_tiJDStart->GetTextCtrl()->GetValue().ToDouble(&m_params.start);
-    read_double      = read_double && m_tiJDEnd->GetTextCtrl()->GetValue().ToDouble(&m_params.end);
-    if (m_params.end < m_params.start)
-        std::swap(m_params.end, m_params.start);
-    if (!read_double || m_params.start >= 0.5 && m_params.end <= 1.5) {
-        float const calib_scale[3] = {1.0f, 1.5f, 2.0f};
-        float _phi = (m_params.end - m_params.start) * 10 / calib_scale[m_rbModel->GetSelection()];
-        float _ksi;
-        for (_ksi = 1; _ksi < 6; _ksi++) { // Get a nice fractional value
-            float _teta = _phi * _ksi;
-            if (abs(_teta - round(_teta)) < 0.001)
-                break;
-        }
-        if (_ksi > 5)
-            _ksi = 1;
-        else
-            _phi *= _ksi;
-        return wxString::Format(_L("Current meas: %.0fcm = %.2f%% or %.4f"), _ksi, _phi, _phi * 0.01) + addtext;
-    } else {
-        return _L("The value is out of range 0.5~1.5!");
-    }
-}
-
-void Practical_Flow_Ratio_Test_Dlg::on_start(wxCommandEvent& event) {
-    bool read_double = false;
-    read_double      = m_tiJDStart->GetTextCtrl()->GetValue().ToDouble(&m_params.start);
-    read_double      = read_double && m_tiJDEnd->GetTextCtrl()->GetValue().ToDouble(&m_params.end);
-    
-    if (!read_double || m_params.start < 0.5 || m_params.start > 1.5 || m_params.end < 0.5 || m_params.end > 1.5) {
-        MessageDialog msg_dlg(nullptr, _L("Please input valid values:\n(0.5 <= Flow Ratio <= 1.5)"), wxEmptyString, wxICON_WARNING | wxOK);
-        msg_dlg.ShowModal();
-        return;
-    } else if (!m_tiQuantity->GetTextCtrl()->GetValue().ToDouble(&m_params.step) || m_params.step < 4 || m_params.step > 40) {
-        MessageDialog msg_dlg(nullptr, _L("Please input valid layer value:\n(4 <= Number of Calibration Layers <= 40)"), wxEmptyString, wxICON_WARNING | wxOK);
-        msg_dlg.ShowModal();
-        return;
-    } else if (m_params.end < m_params.start) {
-        std::swap(m_params.end, m_params.start);
-        MessageDialog msg_dlg(nullptr, _L("NOTE: Parameters has swapped!"), wxEmptyString, wxICON_WARNING | wxOK);
-        msg_dlg.ShowModal();
-    }
-
-    m_params.mode = CalibMode::Calib_Practical_Flow_Ratio;
-
-    // Set model type based on selection
-    m_params.test_model    = m_rbModel->GetSelection();
-    m_params.model_variant = m_rbModelDepth->GetSelection();
-    m_params.interlaced    = m_cbInterlaced->GetValue();
-    m_params.use_zhop      = m_cbUseZHop->GetValue();
-    m_params.print_numbers = m_cbPrintScale->GetValue();
-    m_params.print_ruler   = m_cbPrintRuler->GetValue();
-    double _speed;
-    m_tiSpeed->GetTextCtrl()->GetValue().ToDouble(&_speed);
-    m_params.speeds.clear();
-    m_params.speeds.push_back(_speed);
-    m_plater->Calib_Practical_Flow_Ratio(m_params);
-    EndModal(wxID_OK);
-}
-
-void Practical_Flow_Ratio_Test_Dlg::on_changed(wxCommandEvent& event) {
-    m_stNote->SetLabel(get_status());
-    event.Skip();
-}
-
-void Practical_Flow_Ratio_Test_Dlg::on_changed2(wxMouseEvent& event) {
-    m_stNote->SetLabel(get_status());
-    event.Skip();
-}
-
-void Practical_Flow_Ratio_Test_Dlg::on_dpi_changed(const wxRect& suggested_rect) {
-        this->Refresh();
-    Fit();
-}
-void Practical_Flow_Ratio_Test_Dlg::on_show(wxShowEvent& event) { m_stNote->SetLabel(get_status()); }
-
-FlowRateCalibrationDialog::~FlowRateCalibrationDialog() {
-    // Disconnect Events
 }
 
 void FlowRateCalibrationDialog::on_start(wxCommandEvent& event) {

@@ -227,9 +227,6 @@ wxDEFINE_EVENT(EVT_NOTICE_FULL_SCREEN_CHANGED, IntEvent);
 #define PRINTER_PANEL_RADIUS (6) // ORCA
 #define BTN_SYNC_SIZE (wxSize(FromDIP(96), FromDIP(98)))
 
-wxFont                    calib_font(10, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, false, "NotoSans");
-Emboss::FontFileWithCache calib_font_with_cache(std::move(WxFontUtils::create_font_file(calib_font)));
-
 /// <summary>
 /// Get the orthogonal box mesh (Experemental, can rethink and add)
 /// </summary>
@@ -287,6 +284,8 @@ static TriangleMesh get_ortho_triangle_mesh(Vec3d size, Vec3f position = Vec3f()
 ///     "offset" external expansion relative to the borders of the text.</param>
 static TriangleMesh get_text_mesh(const char *text, FontProp &font_props, Vec3d size, Vec3f position = Vec3f(), Vec2f background = Vec2f())
 {
+    static wxFont calib_font(10, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+    static Emboss::FontFileWithCache calib_font_with_cache(WxFontUtils::create_font_file(calib_font));
     TriangleMesh mesh(
         Emboss::text2model(calib_font_with_cache, text, font_props, Vec3d(size.x(), size.y(), size.z() + background.x()))); // get text mesh
     if (background.x()) {
