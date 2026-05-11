@@ -191,6 +191,7 @@ public:
 
 protected:
     virtual void on_start(wxCommandEvent& event);
+    virtual void on_autoslice(wxCommandEvent& event);
     virtual void on_changed(wxCommandEvent& event);  
     virtual void on_changed2(wxMouseEvent& event);
     virtual void on_show(wxShowEvent& event);

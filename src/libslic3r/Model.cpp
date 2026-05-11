@@ -93,8 +93,6 @@ Model& Model::assign_copy(const Model &rhs)
         this->calib_pa_pattern = std::make_unique<CalibPressureAdvancePattern>(CalibPressureAdvancePattern(*rhs.calib_pa_pattern));
     }
 
-    this->calib_params = rhs.calib_params;
-
     // BBS: for design info
     this->design_info = rhs.design_info;
     this->model_info = rhs.model_info;
@@ -132,8 +130,6 @@ Model& Model::assign_copy(Model &&rhs)
     this->curr_plate_index = rhs.curr_plate_index;
     this->calib_pa_pattern.reset();
     this->calib_pa_pattern.swap(rhs.calib_pa_pattern);
-
-    this->calib_params = rhs.calib_params;
 
     //BBS: add auxiliary path logic
     // BBS: backup, all in one temp dir
@@ -1143,6 +1139,7 @@ ModelObject& ModelObject::assign_copy(const ModelObject &rhs)
     this->layer_height_profile        = rhs.layer_height_profile;
     this->printable                   = rhs.printable;
     this->origin_translation          = rhs.origin_translation;
+    this->calib_params                = rhs.calib_params;
     this->cut_id.copy(rhs.cut_id);
     this->copy_transformation_caches(rhs);
 

@@ -165,14 +165,14 @@ void Fill::fill_surface_extrusion(const Surface* surface, const FillParams& para
         eec->no_sort = this->no_sort();
 
         // Calibration section (pre-extrusion)
-        if (calib_params != nullptr) {
-            switch (calib_params->mode) {
+        if (this->calib_params != nullptr) {
+            switch (this->calib_params->mode) {
             case CalibMode::Calib_Flow_Rate:
                 if (params.extrusion_role == erTopSolidInfill) {
                     eec->no_sort = true;
                     break;
                 }
-            case CalibMode::Calib_Practical_Flow_Ratio: 
+            case CalibMode::Calib_Practical_Flowratio: 
                 if (layer_id > 3)
                     eec->no_sort = true;
             }
@@ -193,14 +193,14 @@ void Fill::fill_surface_extrusion(const Surface* surface, const FillParams& para
         }
 
         // Calibration section (post-extrusion) with sended parameters
-        if (calib_params != nullptr) {
-            switch (calib_params->mode) {
+        if (this->calib_params != nullptr) {
+            switch (this->calib_params->mode) {
             case CalibMode::Calib_Flow_Rate:
                 for (size_t i = idx; i < eec->entities.size(); i++) {
                     eec->entities[i]->set_reverse();
                 }
                 break;
-            case CalibMode::Calib_Practical_Flow_Ratio:
+            case CalibMode::Calib_Practical_Flowratio:
                 const BoundingBox _bbox      = this->bounding_box;
                 const coord_t     _width     = _bbox.size().x();
                 const coord_t     _semiwidth = _width / 2;
@@ -220,7 +220,7 @@ void Fill::fill_surface_extrusion(const Surface* surface, const FillParams& para
                         if (_p->polyline.points.front().y() > _p->polyline.points.back().y())
                             _p->reverse();
                     }
-                    if (calib_params->interlaced) { // Inrtleaced sort
+                    if (this->calib_params->interlaced) { // Inrtleaced sort
                         std::vector<ExtrusionPath*> a, b;
                         int                         _i = 0;
                         for (ExtrusionEntity* e : eec->entities) {

@@ -27,7 +27,7 @@ enum class CalibMode : int {
     Calib_Input_shaping_freq,
     Calib_Input_shaping_damp,
     Calib_Junction_Deviation,
-    Calib_Practical_Flow_Ratio,
+    Calib_Practical_Flowratio,
     Calib_Cornering
 };
 

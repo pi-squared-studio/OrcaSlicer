@@ -1439,7 +1439,7 @@ void Cornering_Test_Dlg::on_dpi_changed(const wxRect& suggested_rect) {
 
 // Practical_Flow_Ratio_Test_Dlg
 Practical_Flow_Ratio_Test_Dlg::Practical_Flow_Ratio_Test_Dlg(wxWindow* parent, wxWindowID id, Plater* plater)
-    : DPIDialog(parent, id, _L("Prectical flow ratio calibration test"), wxDefaultPosition, parent->FromDIP(wxSize(-1, 280)), wxDEFAULT_DIALOG_STYLE)
+    : DPIDialog(parent, id, _L("Practical flow ratio calibration test"), wxDefaultPosition, parent->FromDIP(wxSize(-1, 280)), wxDEFAULT_DIALOG_STYLE)
     , m_plater(plater) {
     SetBackgroundColour(*wxWHITE); // make sure background color set for dialog
     SetForegroundColour(wxColour("#363636"));
@@ -1469,7 +1469,7 @@ Practical_Flow_Ratio_Test_Dlg::Practical_Flow_Ratio_Test_Dlg(wxWindow* parent, w
     // Model selection
     auto labeled_box_model = new LabeledStaticBox(this, _L("Model width"));
     auto model_box         = new wxStaticBoxSizer(labeled_box_model, wxHORIZONTAL);
-    m_rbModel = new RadioGroup(this, {"100 mm", "150 mm", "200 mm"}, wxHORIZONTAL);
+    m_rbModel = new RadioGroup(this, {_L("100 mm"), _L("150 mm"), _L("200 mm")}, wxHORIZONTAL);
     for (auto &_el : m_rbModel->GetChildren()) // sets the note of range unit converting into flow ratio
         _el->Bind(wxEVT_MOTION, &Practical_Flow_Ratio_Test_Dlg::on_changed2, this);
     model_box->Add(m_rbModel, 0, wxALL | wxEXPAND, FromDIP(4));
@@ -1477,7 +1477,7 @@ Practical_Flow_Ratio_Test_Dlg::Practical_Flow_Ratio_Test_Dlg(wxWindow* parent, w
 
     labeled_box_model = new LabeledStaticBox(this, _L("Model depth"));
     model_box         = new wxStaticBoxSizer(labeled_box_model, wxHORIZONTAL);
-    m_rbModelDepth = new RadioGroup(this, {"10 mm", "15 mm", "20 mm"}, wxHORIZONTAL);
+    m_rbModelDepth = new RadioGroup(this, {_L("10 mm"), _L("15 mm"), _L("20 mm")}, wxHORIZONTAL);
     model_box->Add(m_rbModelDepth, 0, wxALL | wxEXPAND, FromDIP(4));
     v_sizer->Add(model_box, 0, wxTOP | wxRIGHT | wxLEFT | wxEXPAND, FromDIP(10));
 
@@ -1557,7 +1557,7 @@ Practical_Flow_Ratio_Test_Dlg::Practical_Flow_Ratio_Test_Dlg(wxWindow* parent, w
 
     cb_title       = new wxStaticText(this, wxID_ANY, scale_fr_str, wxDefaultPosition, st_size, 0);
     m_cbPrintScale = new CheckBox(this);
-    m_cbPrintScale->SetValue(false);
+    m_cbPrintScale->SetValue(true);
     cb_sizer = new wxBoxSizer(wxHORIZONTAL);
     cb_sizer->Add(cb_title, 0, wxALL | wxALIGN_CENTER_VERTICAL, FromDIP(2));
     cb_sizer->Add(m_cbPrintScale, 0, wxALL | wxALIGN_CENTER_VERTICAL, FromDIP(2));
@@ -1566,7 +1566,7 @@ Practical_Flow_Ratio_Test_Dlg::Practical_Flow_Ratio_Test_Dlg(wxWindow* parent, w
 
     cb_title       = new wxStaticText(this, wxID_ANY, ruler_fr_str, wxDefaultPosition, st_size, 0);
     m_cbPrintRuler = new CheckBox(this);
-    m_cbPrintRuler->SetValue(false);
+    m_cbPrintRuler->SetValue(true);
     cb_sizer = new wxBoxSizer(wxHORIZONTAL);
     cb_sizer->Add(cb_title, 0, wxALL | wxALIGN_CENTER_VERTICAL, FromDIP(2));
     cb_sizer->Add(m_cbPrintRuler, 0, wxALL | wxALIGN_CENTER_VERTICAL, FromDIP(2));
@@ -1576,10 +1576,12 @@ Practical_Flow_Ratio_Test_Dlg::Practical_Flow_Ratio_Test_Dlg(wxWindow* parent, w
     v_sizer->Add(conditions_sizer, 0, wxTOP | wxRIGHT | wxLEFT | wxEXPAND, FromDIP(10));
     v_sizer->AddSpacer(FromDIP(5));
 
-    auto dlg_btns = new DialogButtons(this, {"OK"});
-    v_sizer->Add(dlg_btns, 0, wxEXPAND);
+    cb_sizer      = new wxBoxSizer(wxHORIZONTAL);
+    auto dlg_btn  = new DialogButtons(this, {"OK", _L("Autoslice")});
+    v_sizer->Add(dlg_btn, 0, wxEXPAND);
 
-    dlg_btns->GetOK()->Bind(wxEVT_BUTTON, &Practical_Flow_Ratio_Test_Dlg::on_start, this);
+    dlg_btn->GetOK()->Bind(wxEVT_BUTTON, &Practical_Flow_Ratio_Test_Dlg::on_start, this);
+    dlg_btn->GetButtonFromIndex(1)->Bind(wxEVT_BUTTON, &Practical_Flow_Ratio_Test_Dlg::on_autoslice, this);
 
     wxGetApp().UpdateDlgDarkUI(this);
 
@@ -1643,7 +1645,7 @@ void Practical_Flow_Ratio_Test_Dlg::on_start(wxCommandEvent& event)
         msg_dlg.ShowModal();
     }
 
-    m_params.mode = CalibMode::Calib_Practical_Flow_Ratio;
+    m_params.mode = CalibMode::Calib_Practical_Flowratio;
 
     // Set model type based on selection
     m_params.test_model    = m_rbModel->GetSelection();
@@ -1656,8 +1658,15 @@ void Practical_Flow_Ratio_Test_Dlg::on_start(wxCommandEvent& event)
     m_tiSpeed->GetTextCtrl()->GetValue().ToDouble(&_speed);
     m_params.speeds.clear();
     m_params.speeds.push_back(_speed);
-    m_plater->Calib_Practical_Flow_Ratio(m_params);
+    m_plater->calib_practical_flowratio(m_params);
     EndModal(wxID_OK);
+}
+
+void Practical_Flow_Ratio_Test_Dlg::on_autoslice(wxCommandEvent& event) 
+{ 
+    Practical_Flow_Ratio_Test_Dlg::on_start(event);
+    m_plater->reslice();
+    m_plater->select_view_3D("Preview");
 }
 
 void Practical_Flow_Ratio_Test_Dlg::on_changed(wxCommandEvent& event)
