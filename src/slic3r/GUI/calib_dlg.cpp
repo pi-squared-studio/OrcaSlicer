@@ -1667,6 +1667,7 @@ void Practical_Flow_Ratio_Test_Dlg::on_autoslice(wxCommandEvent& event)
     Practical_Flow_Ratio_Test_Dlg::on_start(event);
     m_plater->reslice();
     m_plater->select_view_3D("Preview");
+    wxGetApp().mainframe->select_tab(MainFrame::tpPreview);
 }
 
 void Practical_Flow_Ratio_Test_Dlg::on_changed(wxCommandEvent& event)

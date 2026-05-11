@@ -12986,11 +12986,11 @@ void Plater::calib_practical_flowratio(const Calib_Params& params) {
     const double        _body_height    = first_layer_height + layer_height; // rulers height
     const double        _offset         = nozzle_diameter * 2.;              // text labels offset
     const double        _font_size      = nozzle_diameter * 16.25;           // font size
-    Vec3d               _size(1., _font_size, layer_height * 2.);            // text dimensions
-    FontProp            fp;                                                  // text properties
-    Vec2f               _bg(_body_height, _offset);                          // set text background plate
     const auto          _filament_fr    = filament_config->option<ConfigOptionFloatsNullable>("filament_flow_ratio")->get_at(0); // filament flow ratio
     const auto          _real_fr        = 1. / _filament_fr;                                                                     // filament flow ratio mark position
+    Vec3d               _size(1., _font_size, layer_height * 2.);            // text dimensions
+    Vec2f               _bg(_body_height, _offset);                          // set text background plate
+    FontProp            _fp;                                                 // text properties
 
     test_model->name = _name;
     test_model->translate_instances(Vec3d(_center.x() - xscale * 50, _center.y() - yscale * 5, 0.0));
@@ -13002,14 +13002,21 @@ void Plater::calib_practical_flowratio(const Calib_Params& params) {
         test_model->add_volume(get_ortho_box_mesh(Vec3d(_width + _div_width, -_baseline + nozzle_diameter, _body_height),
                                                   Vec3f(-_div_semiwidth, -nozzle_diameter, 0.))); // ruler's body
 
-        fp.align = FontProp::Align(FontProp::HorizontalAlign::center, FontProp::VerticalAlign::top); // correct the text position
-        TriangleMesh mesh = get_text_mesh(format("fr=%.3f", _filament_fr).c_str(), fp, _size, Vec3f(_width / 2., -_baseline + nozzle_diameter - 5., 0.), _bg);
+        _fp.align = FontProp::Align(FontProp::HorizontalAlign::center, FontProp::VerticalAlign::top); // correct the text position
+        const double _fr_pos = _width / (params.end - params.start) * (1. - params.start);
+        const bool   _fr_out = params.end < 1.0 || params.start > 1.0;
+        if (!_fr_out)
+            test_model->add_volume(get_ortho_box_mesh(Vec3d(_div_width, -7., _body_height), 
+                                                      Vec3f(_fr_pos - _div_semiwidth, -_baseline, 0.))); // flowrate divider
+        TriangleMesh mesh = get_text_mesh(format("fr=%.3f", _filament_fr).c_str(), _fp, _size, 
+                                          Vec3f(_fr_out ? _width / 2. : _fr_pos, -_baseline + nozzle_diameter - 7., 0.),
+                                          _bg);
         test_model->add_volume(mesh);
         const double _basedepth = -mesh.bounding_box().min.y(); // ruler's base depth
         const double _delta_y   = _basedepth - _div_semiwidth;  // y displacement     
 
-        fp.align = FontProp::Align(FontProp::HorizontalAlign::right, FontProp::VerticalAlign::top); // correct the text position
-        mesh = get_text_mesh(format("%s %.0fmm/s %s", filament_config->get_filament_type(), params.speeds[0], params.interlaced ? "il" : "sr").c_str(), fp, _size,
+        _fp.align = FontProp::Align(FontProp::HorizontalAlign::right, FontProp::VerticalAlign::top); // correct the text position
+        mesh = get_text_mesh(format("%s %.0fmm/s %s", filament_config->get_filament_type(), params.speeds[0], params.interlaced ? "il" : "sr").c_str(), _fp, _size,
                                           Vec3f(_width - _offset + _div_semiwidth, -_delta_y, 0.), _bg);
         test_model->add_volume(mesh);
 
@@ -13025,8 +13032,8 @@ void Plater::calib_practical_flowratio(const Calib_Params& params) {
         else
             _phi *= _ksi;
 
-        fp.align = FontProp::Align(FontProp::HorizontalAlign::left, FontProp::VerticalAlign::top); // correct the text position
-        mesh     = get_text_mesh(format("%.0fcm=%.2f%%=%.4f", _ksi, _phi, _phi * 0.01).c_str(), fp, _size,
+        _fp.align = FontProp::Align(FontProp::HorizontalAlign::left, FontProp::VerticalAlign::top); // correct the text position
+        mesh     = get_text_mesh(format("%.0fcm=%.2f%%=%.4f", _ksi, _phi, _phi * 0.01).c_str(), _fp, _size,
                                  Vec3f(0., -_delta_y , 0.), _bg); // ruler's notification
         const double _rule_xmin = mesh.bounding_box().min.x();
         mesh.translate(Vec3f(-_rule_xmin - _div_semiwidth, 0., 0.));
@@ -13060,16 +13067,16 @@ void Plater::calib_practical_flowratio(const Calib_Params& params) {
         const double _baseline = nozzle_diameter * 5 + _depth;                                          // baseline offset
         test_model->add_volume(get_ortho_box_mesh(Vec3d(_width + _div_width, -nozzle_diameter * 4, _body_height),
                                                   Vec3f(-_div_semiwidth, _baseline, 0.)));              // scale body
-        fp.align = FontProp::Align(FontProp::HorizontalAlign::left, FontProp::VerticalAlign::top);      // correct the text position
-        TriangleMesh mesh = get_text_mesh(format("%.3f", params.start).c_str(), fp, _size,
+        _fp.align = FontProp::Align(FontProp::HorizontalAlign::left, FontProp::VerticalAlign::top);      // correct the text position
+        TriangleMesh mesh = get_text_mesh(format("%.3f", params.start).c_str(), _fp, _size,
                                           Vec3f(_offset - _div_semiwidth, 0., 0.), _bg);   // start scale value
         const double _basedepth = mesh.bounding_box().size().y() * 2. + 5.;                             // ruler's base depth
         const double _delta_y   = _baseline + _basedepth;                                               // y displacement
         mesh.translate(Vec3f(0., _delta_y + _offset - _div_semiwidth, 0.));
         test_model->add_volume(mesh);
 
-        fp.align = FontProp::Align(FontProp::HorizontalAlign::right, FontProp::VerticalAlign::top);     // correct the text position
-        test_model->add_volume(get_text_mesh(format("%.3f", params.end).c_str(), fp, _size,
+        _fp.align = FontProp::Align(FontProp::HorizontalAlign::right, FontProp::VerticalAlign::top);     // correct the text position
+        test_model->add_volume(get_text_mesh(format("%.3f", params.end).c_str(), _fp, _size,
                                Vec3f(_width - _offset + _div_semiwidth, _delta_y + _offset - _div_semiwidth, 0.), _bg)); // start scale value
         test_model->add_volume(get_ortho_box_mesh(Vec3d(_width + _div_width, _div_width, _body_height),
                                                   Vec3f(-_div_semiwidth, _delta_y, 0.)));               // scale upper line
@@ -13078,7 +13085,7 @@ void Plater::calib_practical_flowratio(const Calib_Params& params) {
         test_model->add_volume(get_ortho_box_mesh(Vec3d(_div_width, _basedepth, _body_height),
                                                   Vec3f(_width - _div_semiwidth, _baseline, 0.)));      // end scale divider
         
-        fp.align = FontProp::Align(FontProp::HorizontalAlign::center, FontProp::VerticalAlign::bottom); // correct the text position
+        _fp.align = FontProp::Align(FontProp::HorizontalAlign::center, FontProp::VerticalAlign::bottom); // correct the text position
         int _istart = params.start * 1000;
         int _iend   = params.end * 1000;
         for (int _i = floor(params.start) * 1000; _i < _iend; _i++) {
@@ -13099,7 +13106,7 @@ void Plater::calib_practical_flowratio(const Calib_Params& params) {
                         get_ortho_box_mesh(Vec3d(_div_width, _l, _body_height),
                                            Vec3f(_delta_x, _baseline, 0.))); // scale dividers
                     if (_l > 3)
-                        test_model->add_volume(get_text_mesh(format("%.2f", _idbl).c_str(), fp, _size, 
+                        test_model->add_volume(get_text_mesh(format("%.2f", _idbl).c_str(), _fp, _size, 
                                                              Vec3f(_delta_x + _div_semiwidth, _baseline + 5., 0.),
                                                              _bg)); // divider scale value
                 }
