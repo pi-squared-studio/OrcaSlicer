@@ -82,6 +82,7 @@
 #include "GUI_Utils.hpp"
 #include "GUI_Factories.hpp"
 #include "wxExtensions.hpp"
+#include "../Utils/PrintHost.hpp"
 #include "MainFrame.hpp"
 #include "format.hpp"
 #include "3DScene.hpp"
@@ -170,6 +171,8 @@
 
 #include "DeviceCore/DevFilaSystem.h"
 #include "DeviceCore/DevManager.h"
+#include "DeviceCore/DevConfigUtil.h"
+#include "DeviceCore/DevDefs.h"
 
 #include "../Utils/WxFontUtils.hpp"
 #include "libslic3r/TextConfiguration.hpp"
@@ -519,6 +522,7 @@ struct ExtruderGroup : StaticGroup
     }
 
     void update_ams();
+    void SetTitle(const wxString& title);
 
     void sync_ams(MachineObject const *obj, std::vector<DevAms *> const &ams4, std::vector<DevAms *> const &ams1);
 
@@ -1339,6 +1343,16 @@ void ExtruderGroup::sync_ams(MachineObject const *obj, std::vector<DevAms *> con
         update_ams();
 }
 
+void ExtruderGroup::SetTitle(const wxString& title)
+{
+    m_label = title;
+    int tW, tH, descent, externalLeading;
+    GetTextExtent(m_label.IsEmpty() ? "Orca" : m_label, &tW, &tH, &descent, &externalLeading, &m_font);
+    m_label_height = tH - externalLeading;
+    m_label_width  = tW;
+    Refresh();
+}
+
 bool Sidebar::priv::switch_diameter(bool single)
 {
     wxString diameter;
@@ -1348,13 +1362,16 @@ bool Sidebar::priv::switch_diameter(bool single)
         auto diameter_left = left_extruder->combo_diameter->GetValue();
         auto diameter_right = right_extruder->combo_diameter->GetValue();
         if (diameter_left != diameter_right) {
+            std::string printer_type = wxGetApp().preset_bundle->printers.get_edited_preset().get_printer_type(wxGetApp().preset_bundle);
+            auto left_name  = _L(DevPrinterConfigUtil::get_toolhead_display_name(printer_type, DEPUTY_EXTRUDER_ID, ToolHeadComponent::Nozzle, ToolHeadNameCase::SentenceCase));
+            auto right_name = _L(DevPrinterConfigUtil::get_toolhead_display_name(printer_type, MAIN_EXTRUDER_ID, ToolHeadComponent::Nozzle, ToolHeadNameCase::SentenceCase));
             MessageDialog dlg(this->plater,
                               _L("The software does not support using different diameter of nozzles for one print. "
                                  "If the left and right nozzles are inconsistent, we can only proceed with single-head printing. "
                                  "Please confirm which nozzle you would like to use for this project."),
                               _L("Switch diameter"), wxYES_NO | wxNO_DEFAULT);
-            dlg.SetButtonLabel(wxID_YES, wxString::Format(_L("Left nozzle: %smm"), diameter_left));
-            dlg.SetButtonLabel(wxID_NO, wxString::Format(_L("Right nozzle: %smm"), diameter_right));
+            dlg.SetButtonLabel(wxID_YES, wxString::Format("%s: %smm", left_name, diameter_left));
+            dlg.SetButtonLabel(wxID_NO, wxString::Format("%s: %smm", right_name, diameter_right));
             int result = dlg.ShowModal();
             if (result == wxID_YES)
                 diameter = diameter_left;
@@ -2543,13 +2560,11 @@ void Sidebar::update_all_preset_comboboxes()
             p->m_bpButton_ams_filament->Hide();
 
         auto print_btn_type = MainFrame::PrintSelectType::eExportGcode;
-        wxString url = cfg.opt_string("print_host_webui").empty() ? cfg.opt_string("print_host") : cfg.opt_string("print_host_webui");
+        wxString url = from_u8(PrintHost::get_print_host_webui(&cfg));
         wxString apikey;
         if(url.empty())
             url = wxString::Format("file://%s/web/orca/missing_connection.html", from_u8(resources_dir()));
         else {
-            if (!url.Lower().starts_with("http"))
-                url = wxString::Format("http://%s", url);
             const auto host_type = cfg.option<ConfigOptionEnum<PrintHostType>>("host_type")->value;
             if (cfg.has("printhost_apikey") && (host_type != htSimplyPrint))
                 apikey = cfg.opt_string("printhost_apikey");
@@ -2737,6 +2752,9 @@ void Sidebar::update_presets(Preset::Type preset_type)
         };
         auto image_path = get_cur_select_bed_image();
         if (is_dual_extruder) {
+            std::string printer_type = printer_preset.get_printer_type(wxGetApp().preset_bundle);
+            p->left_extruder->SetTitle(_L(DevPrinterConfigUtil::get_toolhead_display_name(printer_type, DEPUTY_EXTRUDER_ID, ToolHeadComponent::Nozzle, ToolHeadNameCase::TitleCase)));
+            p->right_extruder->SetTitle(_L(DevPrinterConfigUtil::get_toolhead_display_name(printer_type, MAIN_EXTRUDER_ID, ToolHeadComponent::Nozzle, ToolHeadNameCase::TitleCase)));
             AMSCountPopupWindow::UpdateAMSCount(0, p->left_extruder);
             AMSCountPopupWindow::UpdateAMSCount(1, p->right_extruder);
             //if (!p->is_switching_diameter) {
@@ -6999,6 +7017,12 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
     }
 
     if (load_model) {
+        if (!q->m_exported_file && view3D != nullptr) {
+            // Force a 3D scene refresh after view/plate selection to avoid losing the first load
+            // on platforms where the GL canvas mapping lags behind model loading.
+            view3D->reload_scene(true);
+            view3D->set_as_dirty();
+        }
         if (!silence) wxGetApp().app_config->update_skein_dir(input_files[input_files.size() - 1].parent_path().make_preferred().string());
         // XXX: Plater.pm had @loaded_files, but didn't seem to fill them with the filenames...
     }
@@ -9206,6 +9230,20 @@ void Plater::priv::set_current_panel(wxPanel* panel, bool no_slice)
 
     if (current_panel == panel)
     {
+        if (panel == view3D) {
+            if (view3D->is_reload_delayed()) {
+                // Delayed loading of the 3D scene when caller requests the already active tab.
+                if (printer_technology == ptSLA)
+                    update_restart_background_process(true, false);
+                else
+                    view3D->reload_scene(true);
+            }
+
+            view3D->set_as_dirty();
+            view3D->get_canvas3d()->reset_old_size();
+            if (notification_manager != nullptr)
+                notification_manager->set_in_preview(false);
+        }
         //BBS: add slice logic when switch to preview page
         //BBS: add only gcode mode
         if (!q->only_gcode_mode() && (current_panel == preview) && (wxGetApp().is_editor())) {
@@ -13596,6 +13634,8 @@ void Plater::calib_VFA(const Calib_Params& params)
     auto filament_config = &wxGetApp().preset_bundle->filaments.get_edited_preset().config;
     auto printer_config  = &wxGetApp().preset_bundle->printers.get_edited_preset().config;
     printer_config->set_key_value("resonance_avoidance", new ConfigOptionBool{false});
+    printer_config->set_key_value("input_shaping_emit", new ConfigOptionBool{true});
+    printer_config->set_key_value("input_shaping_type", new ConfigOptionEnum<InputShaperType>(InputShaperType::Disable));
     filament_config->set_key_value("slow_down_layer_time", new ConfigOptionFloats { 0.0 });
     print_config->set_key_value("enable_overhang_speed", new ConfigOptionBool { false });
     print_config->set_key_value("timelapse_type", new ConfigOptionEnum<TimelapseType>(tlTraditional));
@@ -13659,10 +13699,12 @@ void Plater::calib_input_shaping_freq(const Calib_Params& params)
     }
 
     printer_config->set_key_value("resonance_avoidance", new ConfigOptionBool{false});
+    printer_config->set_key_value("input_shaping_emit", new ConfigOptionBool{false});
     filament_config->set_key_value("slow_down_layer_time", new ConfigOptionFloats { 0.0 });
     filament_config->set_key_value("slow_down_min_speed", new ConfigOptionFloats { 0.0 });
     filament_config->set_key_value("slow_down_for_layer_cooling", new ConfigOptionBools{false});
-    print_config->set_key_value("enable_overhang_speed", new ConfigOptionBool { false });
+    print_config->set_key_value("layer_height", new ConfigOptionFloat(0.2));
+    print_config->set_key_value("enable_overhang_speed", new ConfigOptionBool{false});
     print_config->set_key_value("timelapse_type", new ConfigOptionEnum<TimelapseType>(tlTraditional));
     print_config->set_key_value("wall_loops", new ConfigOptionInt(1));
     print_config->set_key_value("top_shell_layers", new ConfigOptionInt(0));
@@ -13720,6 +13762,7 @@ void Plater::calib_input_shaping_damp(const Calib_Params& params)
     }
 
     printer_config->set_key_value("resonance_avoidance", new ConfigOptionBool{false});
+    printer_config->set_key_value("input_shaping_emit", new ConfigOptionBool{false});
     filament_config->set_key_value("slow_down_layer_time", new ConfigOptionFloats { 0.0 });
     filament_config->set_key_value("slow_down_min_speed", new ConfigOptionFloats { 0.0 });
     filament_config->set_key_value("slow_down_for_layer_cooling", new ConfigOptionBools{false});
@@ -13782,6 +13825,8 @@ void Plater::Calib_Cornering(const Calib_Params& params)
     }
 
     printer_config->set_key_value("resonance_avoidance", new ConfigOptionBool{false});
+    printer_config->set_key_value("input_shaping_emit", new ConfigOptionBool{true});
+    printer_config->set_key_value("input_shaping_type", new ConfigOptionEnum<InputShaperType>(InputShaperType::Disable));
     filament_config->set_key_value("slow_down_layer_time", new ConfigOptionFloats { 0.0 });
     filament_config->set_key_value("slow_down_min_speed", new ConfigOptionFloats { 0.0 });
     filament_config->set_key_value("slow_down_for_layer_cooling", new ConfigOptionBools{false});
@@ -14234,7 +14279,6 @@ public:
     wxPanel *     m_top_line;
     wxStaticText *m_fname_title;
     wxStaticText *m_fname_f;
-    wxStaticText *m_fname_s;
     StaticBox * m_panel_select;
 
     void      on_select_ok(wxCommandEvent &event);
@@ -14244,7 +14288,6 @@ public:
     void      set_action(int index) { m_action = index; }
 
     wxBoxSizer *create_remember_checkbox(wxString title, wxWindow* parent, wxString tooltip);
-    wxBoxSizer *create_item_radiobox(wxString title, wxWindow *parent, int select_id, int groupid);
 
 protected:
     void on_dpi_changed(const wxRect &suggested_rect) override;
@@ -14262,10 +14305,6 @@ ProjectDropDialog::ProjectDropDialog(const std::string &filename)
     // def setting
     SetBackgroundColour(m_def_color);
 
-    // icon
-    std::string icon_path = (boost::format("%1%/images/OrcaSlicerTitle.ico") % resources_dir()).str();
-    SetIcon(wxIcon(encode_path(icon_path.c_str()), wxBITMAP_TYPE_ICO));
-
     wxBoxSizer *m_sizer_main = new wxBoxSizer(wxVERTICAL);
 
     m_top_line = new wxPanel(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL);
@@ -14273,37 +14312,23 @@ ProjectDropDialog::ProjectDropDialog(const std::string &filename)
 
     m_sizer_main->Add(m_top_line, 0, wxEXPAND, 0);
 
-    m_sizer_main->Add(0, 0, 0, wxEXPAND | wxTOP, 20);
+    m_sizer_main->AddSpacer(FromDIP(15));
 
-    wxBoxSizer *m_sizer_name = new wxBoxSizer(wxVERTICAL);
-    wxBoxSizer *m_sizer_fline = new wxBoxSizer(wxHORIZONTAL);
-
+    // ORCA use file name on new line to create room for longer names
     m_fname_title = new wxStaticText(this, wxID_ANY, _L("Please select an action"), wxDefaultPosition, wxDefaultSize, 0);
-    m_fname_title->Wrap(-1);
     m_fname_title->SetFont(::Label::Body_14);
-    m_fname_title->SetForegroundColour(wxColour(107, 107, 107));
-    m_fname_title->SetBackgroundColour(wxColour(255, 255, 255));
+    m_fname_title->SetForegroundColour(wxColour("#363636"));
 
-    m_sizer_fline->Add(m_fname_title, 0, wxALL, 0);
-    m_sizer_fline->Add(0, 0, 0, wxEXPAND | wxLEFT, 5);
-
-    m_fname_f = new wxStaticText(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0);
+    m_fname_f = new wxStaticText(this, wxID_ANY, filename);
     m_fname_f->SetFont(::Label::Head_14);
-    m_fname_f->Wrap(-1);
-    m_fname_f->SetForegroundColour(wxColour(38, 46, 48));
+    m_fname_f->SetMaxSize(wxSize(FromDIP(300),-1));
+    m_fname_f->Wrap(FromDIP(300));
+    m_fname_f->SetForegroundColour(wxColour("#363636"));
 
-    m_sizer_fline->Add(m_fname_f, 1, wxALL, 0);
-
-    m_sizer_name->Add(m_sizer_fline, 1, wxEXPAND, 0);
-
-    m_fname_s = new wxStaticText(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0);
-    m_fname_s->SetFont(::Label::Head_14);
-    m_fname_s->Wrap(-1);
-    m_fname_s->SetForegroundColour(wxColour(38, 46, 48));
-
-    m_sizer_name->Add(m_fname_s, 1, wxALL, 0);
-
-    m_sizer_main->Add(m_sizer_name, 1, wxEXPAND | wxLEFT | wxRIGHT, 20);
+    m_sizer_main->Add(m_fname_title, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(20));
+    m_sizer_main->AddSpacer(FromDIP(10));
+    m_sizer_main->Add(m_fname_f    , 1, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(20));
+    m_sizer_main->AddSpacer(FromDIP(10));
 
     auto radio_group = new RadioGroup(this, {
         _L("Open as project"),     // 0
@@ -14315,9 +14340,9 @@ ProjectDropDialog::ProjectDropDialog(const std::string &filename)
         set_action(radio_group->GetSelection() + 1);
     });
 
-    m_sizer_main->Add(radio_group, 0, wxEXPAND | wxLEFT | wxRIGHT, 20);
+    m_sizer_main->Add(radio_group, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(20));
 
-    m_sizer_main->Add(0, 0, 0, wxEXPAND | wxTOP, 10);
+    m_sizer_main->AddSpacer(FromDIP(10));
 
     // wxBoxSizer *m_sizer_bottom = new wxBoxSizer(wxHORIZONTAL);
     // Orca: hide the "Don't show again" checkbox, people keeps accidentally checked this then forgot
@@ -14340,29 +14365,6 @@ ProjectDropDialog::ProjectDropDialog(const std::string &filename)
     Layout();
     Fit();
     Centre(wxBOTH);
-
-
-    auto limit_width   = m_fname_f->GetSize().GetWidth() - 2;
-    auto current_width = 0;
-    auto cut_index     = 0;
-    auto fstring       = wxString("");
-    auto bstring       = wxString("");
-
-    //auto file_name = from_u8(filename.c_str());
-    auto file_name = wxString(filename);
-    for (int x = 0; x < file_name.length(); x++) {
-        current_width += m_fname_s->GetTextExtent(file_name[x]).GetWidth();
-        cut_index = x;
-
-        if (current_width > limit_width) {
-            bstring += file_name[x];
-        } else {
-            fstring += file_name[x];
-        }
-    }
-
-    m_fname_f->SetLabel(fstring);
-    m_fname_s->SetLabel(bstring);
 
     wxGetApp().UpdateDlgDarkUI(this);
 }
@@ -15329,7 +15331,7 @@ Preset *get_printer_preset(const MachineObject *obj)
         return nullptr;
 
     Preset       *printer_preset = nullptr;
-    float machine_nozzle_diameter = obj->GetExtderSystem()->GetNozzleDiameter(0);
+
     PresetBundle *preset_bundle  = wxGetApp().preset_bundle;
     for (auto printer_it = preset_bundle->printers.begin(); printer_it != preset_bundle->printers.end(); printer_it++) {
         // only use system printer preset
@@ -15342,7 +15344,8 @@ Preset *get_printer_preset(const MachineObject *obj)
         std::string model_id = printer_it->get_current_printer_type(preset_bundle);
 
         std::string printer_type = obj->get_show_printer_type();
-        if (model_id.compare(printer_type) == 0 && printer_nozzle_vals && abs(printer_nozzle_vals->get_at(0) - machine_nozzle_diameter) < 1e-3) {
+        bool nozzle_diameter_matches_or_unknown = printer_nozzle_vals && obj->GetExtderSystem()->NozzleDiameterMatchesOrUnknown(0, printer_nozzle_vals->get_at(0));
+        if (model_id.compare(printer_type) == 0 && nozzle_diameter_matches_or_unknown) {
             printer_preset = &(*printer_it);
         }
     }
@@ -15358,12 +15361,12 @@ bool Plater::check_printer_initialized(MachineObject *obj, bool only_warning, bo
 
     const auto& extruders = obj->GetExtderSystem()->GetExtruders();
     for (const DevExtder& extruder : extruders) {
-        if (obj->is_multi_extruders()) {
-            if (extruder.GetNozzleFlowType() == NozzleFlowType::NONE_FLOWTYPE) {
-                has_been_initialized = false;
-                break;
-            }
+
+        // Skip check if nozzle type is unknown
+        if (extruder.GetNozzleType() == NozzleType::ntUndefine) {
+            continue;
         }
+
         if (extruder.GetNozzleFlowType() == NozzleFlowType::NONE_FLOWTYPE) {
             has_been_initialized = false;
             break;
