@@ -168,11 +168,10 @@ void Fill::fill_surface_extrusion(const Surface* surface, const FillParams& para
         if (this->calib_params != nullptr) {
             switch (this->calib_params->mode) {
             case CalibMode::Calib_Flow_Rate:
-                if (params.extrusion_role == erTopSolidInfill) {
+                if (params.extrusion_role == erTopSolidInfill)
                     eec->no_sort = true;
-                    break;
-                }
-            case CalibMode::Calib_Practical_Flowratio: 
+                break;
+			case CalibMode::Calib_Practical_Flowratio: 
                 if (layer_id > 3)
                     eec->no_sort = true;
             }
