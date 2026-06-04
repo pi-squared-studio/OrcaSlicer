@@ -337,10 +337,10 @@ struct SurfaceFillParams
 				this->infill_lock_depth       == rhs.infill_lock_depth       &&
 				this->skin_infill_depth       == rhs.skin_infill_depth       &&
                 this->infill_overhang_angle   == rhs.infill_overhang_angle   &&
-                this->gyroid_optimized        == rhs.gyroid_optimized        &&
-                this->anisotropic_surfaces    == rhs.anisotropic_surfaces    &&
+                this->anisotropic_surfaces    == rhs.anisotropic_surfaces &&
                 this->center_of_surface_pattern == rhs.center_of_surface_pattern &&
-                this->separated_infills       == rhs.separated_infills;
+                this->separated_infills       == rhs.separated_infills &&
+                this->gyroid_optimized        == rhs.gyroid_optimized;
 	}
 };
 
