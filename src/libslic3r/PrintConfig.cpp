@@ -6884,14 +6884,14 @@ void PrintConfigDef::init_fff_params()
                        "dispersion when using multi-colored or silk plastics. "
                        "This option disable the gap fill. "
                        "This option can increase a printing time. ");
-    def->mode     = comAdvanced;
+    def->mode     = comExpert;
     def->set_default_value(new ConfigOptionBool(false));
 
     def           = this->add("separated_infills", coBool);
     def->label    = L("Separated infills");
     def->category = L("Strength");
     def->tooltip  = L("Separated infills for each part of the one model. ");
-    def->mode     = comAdvanced;
+    def->mode     = comExpert;
     def->set_default_value(new ConfigOptionBool(false));
 
     def                = this->add("center_of_surface_pattern", coEnum);
@@ -6906,7 +6906,7 @@ void PrintConfigDef::init_fff_params()
     def->enum_labels.push_back(L("Each Surface"));
     def->enum_labels.push_back(L("Each Model"));
     def->enum_labels.push_back(L("Each Assembly"));
-    def->mode = comAdvanced;
+    def->mode = comExpert;
     def->set_default_value(new ConfigOptionEnum<CenterOfSurfacePattern>(CenterOfSurfacePattern::Each_Surface));
 
     def = this->add("travel_speed", coFloats);
