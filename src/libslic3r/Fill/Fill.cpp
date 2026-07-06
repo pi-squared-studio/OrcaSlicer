@@ -1362,22 +1362,36 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
 			params.can_reverse = false;
 		for (ExPolygon& expoly : surface_fill.expolygons) {
 
-            // Orca: separate infill for each model parts
+            // Orca: separate infill for each model part.
+            // Parts of an assembly can overlap, so a strict "contains" test is ambiguous: an
+            // expolygon may sit inside several parts at once, or straddle a boundary and be inside
+            // none. Assign this fill region to the part whose first-layer slice overlaps it the most
+            // (measured by intersection area), which stays correct for overlapping objects.
             if (is_per_model_center || is_separate_infill) {
-                for (auto instance : this->object()->instances()) {
-                    for (auto volume : instance.print_object->firstLayerObjSlice()) {
-                        for (auto slice : volume.slices[f->layer_id]) {
-                            if (slice.contains(to_polylines(expoly))) {
-                                for (auto model_volume : instance.model_instance->get_object()->volumes) {
-                                    if (volume.volume_id.id == model_volume->id().id) {
-                                        f->set_bounding_box(model_volume->get_volume_bbox(instance.model_instance->get_matrix(), instance.shift, true));
-                                        break;
-                                    }
-                                }
+                double       best_overlap      = 0.;
+                ModelVolume* best_model_volume = nullptr;
+                Transform3d        best_matrix       = Transform3d::Identity();
+                Point              best_shift(0, 0);
+                for (const auto& instance : this->object()->instances()) {
+                    for (const auto& volume : instance.print_object->firstLayerObjSlice()) {
+                        if (f->layer_id >= volume.slices.size())
+                            continue;
+                        const double overlap = area(intersection_ex(volume.slices[f->layer_id], ExPolygons{expoly}));
+                        if (overlap <= best_overlap)
+                            continue;
+                        for (auto model_volume : instance.model_instance->get_object()->volumes) {
+                            if (volume.volume_id.id == model_volume->id().id) {
+                                best_overlap      = overlap;
+                                best_model_volume = model_volume;
+                                best_matrix       = instance.model_instance->get_matrix();
+                                best_shift        = instance.shift;
+                                break;
                             }
                         }
                     }
                 }
+                if (best_model_volume)
+                    f->set_bounding_box(best_model_volume->get_volume_bbox(best_matrix, best_shift, true));
             } // - End: separate infill for each model parts
 
             f->no_overlap_expolygons = intersection_ex(surface_fill.no_overlap_expolygons, ExPolygons() = {expoly}, ApplySafetyOffset::Yes);
