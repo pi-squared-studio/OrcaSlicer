@@ -1362,37 +1362,64 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
 			params.can_reverse = false;
 		for (ExPolygon& expoly : surface_fill.expolygons) {
 
-            // Orca: separate infill for each model part.
-            // Parts of an assembly can overlap, so a strict "contains" test is ambiguous: an
-            // expolygon may sit inside several parts at once, or straddle a boundary and be inside
-            // none. Assign this fill region to the part whose first-layer slice overlaps it the most
-            // (measured by intersection area), which stays correct for overlapping objects.
+            // Orca: separate infill / per-model pattern centering.
+            //
+            // First assign this fill region to the model part whose slice at this layer overlaps it
+            // the most. A strict "contains" test is ambiguous for assemblies whose parts overlap (a
+            // region may sit inside several parts, or straddle a boundary and be inside none), so we
+            // pick by intersection area instead.
+            //
+            // For separated infills the center must belong to an *overlap group*, not a single part:
+            // parts that touch/overlap form one connected cluster that shares a single center, while
+            // a part detached from the rest of the assembly gets its own. firstLayerObjGroups()
+            // already holds these connected components, so we widen the chosen part's bbox to the
+            // whole group it belongs to. Each_Model centering keeps the single-part bbox.
             if (is_per_model_center || is_separate_infill) {
-                double       best_overlap      = 0.;
-                ModelVolume* best_model_volume = nullptr;
-                Transform3d        best_matrix       = Transform3d::Identity();
-                Point              best_shift(0, 0);
+                double               best_overlap  = 0.;
+                ObjectID             best_vol_id;
+                const PrintInstance* best_instance = nullptr;
                 for (const auto& instance : this->object()->instances()) {
                     for (const auto& volume : instance.print_object->firstLayerObjSlice()) {
                         if (f->layer_id >= volume.slices.size())
                             continue;
                         const double overlap = area(intersection_ex(volume.slices[f->layer_id], ExPolygons{expoly}));
-                        if (overlap <= best_overlap)
-                            continue;
-                        for (auto model_volume : instance.model_instance->get_object()->volumes) {
-                            if (volume.volume_id.id == model_volume->id().id) {
-                                best_overlap      = overlap;
-                                best_model_volume = model_volume;
-                                best_matrix       = instance.model_instance->get_matrix();
-                                best_shift        = instance.shift;
-                                break;
-                            }
+                        if (overlap > best_overlap) {
+                            best_overlap  = overlap;
+                            best_vol_id   = volume.volume_id;
+                            best_instance = &instance;
                         }
                     }
                 }
-                if (best_model_volume)
-                    f->set_bounding_box(best_model_volume->get_volume_bbox(best_matrix, best_shift, true));
-            } // - End: separate infill for each model parts
+                if (best_instance) {
+                    const Transform3d matrix  = best_instance->model_instance->get_matrix();
+                    Point             shift   = best_instance->shift; // get_volume_bbox takes a non-const ref
+                    auto&             volumes = best_instance->model_instance->get_object()->volumes;
+
+                    // Volume ids to center on: the whole overlap group for separated infills,
+                    // otherwise just the winning part.
+                    std::vector<ObjectID> center_ids;
+                    if (is_separate_infill) {
+                        for (const auto& group : best_instance->print_object->firstLayerObjGroups()) {
+                            bool in_group = false;
+                            for (const ObjectID& vid : group.volume_ids)
+                                if (vid == best_vol_id) { in_group = true; break; }
+                            if (in_group) { center_ids = group.volume_ids; break; }
+                        }
+                    }
+                    if (center_ids.empty())
+                        center_ids.push_back(best_vol_id);
+
+                    BoundingBox bbox;
+                    for (const ObjectID& vid : center_ids)
+                        for (auto model_volume : volumes)
+                            if (vid.id == model_volume->id().id) {
+                                bbox.merge(model_volume->get_volume_bbox(matrix, shift, true));
+                                break;
+                            }
+                    if (bbox.defined)
+                        f->set_bounding_box(bbox);
+                }
+            } // - End: separate infill / per-model pattern centering
 
             f->no_overlap_expolygons = intersection_ex(surface_fill.no_overlap_expolygons, ExPolygons() = {expoly}, ApplySafetyOffset::Yes);
             if (params.symmetric_infill_y_axis) {
