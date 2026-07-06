@@ -1369,11 +1369,12 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
             // region may sit inside several parts, or straddle a boundary and be inside none), so we
             // pick by intersection area instead.
             //
-            // For separated infills the center must belong to an *overlap group*, not a single part:
-            // parts that touch/overlap form one connected cluster that shares a single center, while
-            // a part detached from the rest of the assembly gets its own. firstLayerObjGroups()
-            // already holds these connected components, so we widen the chosen part's bbox to the
-            // whole group it belongs to. Each_Model centering keeps the single-part bbox.
+            // The center must belong to an *overlap group*, not a single part: parts that
+            // touch/overlap form one connected physical body that shares a single center, while a
+            // part detached from the rest of the assembly gets its own. This holds for both
+            // separated infills and Each_Model surface centering (Each_Model == per connected body).
+            // firstLayerObjGroups() already holds these connected components, so we widen the chosen
+            // part's bbox to the whole group it belongs to.
             if (is_per_model_center || is_separate_infill) {
                 double               best_overlap  = 0.;
                 ObjectID             best_vol_id;
@@ -1395,16 +1396,14 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
                     Point             shift   = best_instance->shift; // get_volume_bbox takes a non-const ref
                     auto&             volumes = best_instance->model_instance->get_object()->volumes;
 
-                    // Volume ids to center on: the whole overlap group for separated infills,
-                    // otherwise just the winning part.
+                    // Volume ids to center on: the whole overlap group the winning part belongs to,
+                    // falling back to just that part if it isn't part of any group.
                     std::vector<ObjectID> center_ids;
-                    if (is_separate_infill) {
-                        for (const auto& group : best_instance->print_object->firstLayerObjGroups()) {
-                            bool in_group = false;
-                            for (const ObjectID& vid : group.volume_ids)
-                                if (vid == best_vol_id) { in_group = true; break; }
-                            if (in_group) { center_ids = group.volume_ids; break; }
-                        }
+                    for (const auto& group : best_instance->print_object->firstLayerObjGroups()) {
+                        bool in_group = false;
+                        for (const ObjectID& vid : group.volume_ids)
+                            if (vid == best_vol_id) { in_group = true; break; }
+                        if (in_group) { center_ids = group.volume_ids; break; }
                     }
                     if (center_ids.empty())
                         center_ids.push_back(best_vol_id);
