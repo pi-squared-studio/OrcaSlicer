@@ -561,12 +561,13 @@ void PrintObject::make_perimeters()
 
 void PrintObject::prepare_infill()
 {
+    if (! this->set_started(posPrepareInfill))
+        return;
+
     // Orca: clear all volume bbox caches
     for (auto volume : this->model_object()->volumes)
         volume->reset_volume_bbox();
 
-    if (! this->set_started(posPrepareInfill))
-        return;
     m_print->set_status(25, L("Generating infill regions"));
     if (m_typed_slices) {
         // To improve robustness of detect_surfaces_type() when reslicing (working with typed slices), see GH issue #7442.

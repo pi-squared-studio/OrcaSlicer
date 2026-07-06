@@ -1060,6 +1060,8 @@ private:
     mutable Polygon                     m_cached_2d_polygon;   //BBS, used for convex_hell_2d acceleration
     Geometry::Transformation        	m_transformation;
     mutable BoundingBox                 m_cached_volume_bbox; //Orca: used for separated infills
+    mutable Transform3d                 m_cached_volume_bbox_matrix{Transform3d::Identity()}; //Orca: cache key for m_cached_volume_bbox
+    mutable Point                       m_cached_volume_bbox_shift{Point(0, 0)}; //Orca: cache key for m_cached_volume_bbox
 
     //BBS: add convex_hell_2d related logic
     void  calculate_convex_hull_2d(const Geometry::Transformation &transformation) const;

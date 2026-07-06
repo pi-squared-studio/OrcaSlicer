@@ -191,7 +191,7 @@ CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(PowerLossRecoveryMode)
 static t_config_enum_values s_keys_map_CenterOfSurfacePattern{
     {"each_surface", int(CenterOfSurfacePattern::Each_Surface)},
     {"each_model", int(CenterOfSurfacePattern::Each_Model)},
-    {"each_assemble", int(CenterOfSurfacePattern::Each_Assembly)}};
+    {"each_assembly", int(CenterOfSurfacePattern::Each_Assembly)}};
 CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(CenterOfSurfacePattern)
 
 static t_config_enum_values s_keys_map_FuzzySkinType {
@@ -6874,7 +6874,6 @@ void PrintConfigDef::init_fff_params()
     def->sidetext = L("mm");	// millimeters, CIS languages need translation
     def->min = 0;
     def->set_default_value(new ConfigOptionFloat(0.6));
-
 
     def           = this->add("anisotropic_surfaces", coBool);
     def->label    = L("Anisotropic surfaces");

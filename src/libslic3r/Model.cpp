@@ -2712,10 +2712,16 @@ const TriangleMesh& ModelVolume::get_convex_hull() const
 static std::mutex mtx_model;
 BoundingBox ModelVolume::get_volume_bbox(const Transform3d &matrix, Point &shift, bool apply_cache = false) {
     std::unique_lock l(mtx_model); // locks function here
-    if (m_cached_volume_bbox.defined && apply_cache)
+    // Orca: the cache is keyed by the instance transform/shift; a ModelVolume is shared
+    // across instances, so returning the cache blindly would hand back another instance's bbox.
+    if (m_cached_volume_bbox.defined && apply_cache
+        && matrix.isApprox(m_cached_volume_bbox_matrix)
+        && shift == m_cached_volume_bbox_shift)
         return m_cached_volume_bbox;
     auto hull = get_convex_hull_2d(matrix);
     hull.translate(-shift);
+    m_cached_volume_bbox_matrix = matrix;
+    m_cached_volume_bbox_shift  = shift;
     return m_cached_volume_bbox = hull.bounding_box().polygon().bounding_box();
 }
 

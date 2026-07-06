@@ -166,14 +166,14 @@ void FillPlanePath::_fill_surface_single(
             } else { // Orca: anisotropic surface
                 const Point _center(0., 0.);
                 for (Polyline& segment : polylines) { // sort paths by its direction
-                    if (segment.size() > 1 || !segment.first_point().distance_to(_center)) {
+                    if (segment.size() > 1) { // need at least two points to evaluate direction
                         if (segment.first_point().ccw(segment.points[1], _center) < 0)
                             segment.reverse();
                     }
-                    chained.emplace_back(segment);
+                    chained.emplace_back(std::move(segment));
                 }
-                std::sort(chained.begin(), chained.end(), [](Polyline a, Polyline b) { // just sort polylines from center to outside
-                    return a.distance_to(Point(0., 0.)) < b.distance_to(Point(0., 0.));
+                std::sort(chained.begin(), chained.end(), [&_center](const Polyline& a, const Polyline& b) { // just sort polylines from center to outside
+                    return a.distance_to(_center) < b.distance_to(_center);
                 });
             }
             // paths must be repositioned and rotated back

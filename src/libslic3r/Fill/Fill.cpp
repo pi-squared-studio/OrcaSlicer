@@ -1330,7 +1330,9 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
             params.is_anisotropic            = surface_fill.params.anisotropic_surfaces;      // Orca: anisotropic surfaces
             params.center_of_surface_pattern = surface_fill.params.center_of_surface_pattern; // Orca: center of surface pattern
         }
-        bool is_assembly = is_top_or_bottom && params.center_of_surface_pattern == CenterOfSurfacePattern::Each_Model && is_centered_infill;
+        // Orca: Each_Model centers the pattern on each model part's bbox; Each_Surface / Each_Assembly
+        // fall through to the default (whole-object) bounding box below.
+        bool is_per_model_center = is_top_or_bottom && params.center_of_surface_pattern == CenterOfSurfacePattern::Each_Model && is_centered_infill;
         bool is_separate_infill = !is_top_or_bottom && surface_fill.params.separated_infills &&
                                   (
                                   is_centered_infill ||
@@ -1361,7 +1363,7 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
 		for (ExPolygon& expoly : surface_fill.expolygons) {
 
             // Orca: separate infill for each model parts
-            if (is_assembly || is_separate_infill) {
+            if (is_per_model_center || is_separate_infill) {
                 for (auto instance : this->object()->instances()) {
                     for (auto volume : instance.print_object->firstLayerObjSlice()) {
                         for (auto slice : volume.slices[f->layer_id]) {
