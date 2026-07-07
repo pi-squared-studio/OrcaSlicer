@@ -727,6 +727,14 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
                                      config->option<ConfigOptionEnum<InfillPattern>>("bottom_surface_pattern")->value == InfillPattern::ipOctagramSpiral;
     toggle_line("center_of_surface_pattern", (has_top_shell && is_top_infill_centered) || (has_bottom_shell && is_bottom_infill_centered));
 
+    // Orca: anisotropic surfaces.
+    auto is_anisotropic_pattern = [](InfillPattern p) {
+        return p == InfillPattern::ipArchimedeanChords || p == InfillPattern::ipOctagramSpiral || p == InfillPattern::ipHilbertCurve;
+    };
+    bool is_top_anisotropic    = is_anisotropic_pattern(config->option<ConfigOptionEnum<InfillPattern>>("top_surface_pattern")->value);
+    bool is_bottom_anisotropic = is_anisotropic_pattern(config->option<ConfigOptionEnum<InfillPattern>>("bottom_surface_pattern")->value);
+    toggle_line("anisotropic_surfaces", (has_top_shell && is_top_anisotropic) || (has_bottom_shell && is_bottom_anisotropic));
+
     // Orca: separate infills
     bool is_internal_infill_centered = config->option<ConfigOptionEnum<InfillPattern>>("sparse_infill_pattern")->value == InfillPattern::ipArchimedeanChords ||
                                        config->option<ConfigOptionEnum<InfillPattern>>("sparse_infill_pattern")->value == InfillPattern::ipOctagramSpiral ||
