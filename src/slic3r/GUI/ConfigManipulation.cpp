@@ -720,26 +720,23 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
     toggle_line("top_surface_expansion_direction", has_top_shell);
     toggle_field("top_surface_expansion_direction", has_top_surface_expansion);
 
-    //Orca: center of surface pattern
-    bool is_top_infill_centered = config->option<ConfigOptionEnum<InfillPattern>>("top_surface_pattern")->value == InfillPattern::ipArchimedeanChords ||
-                                  config->option<ConfigOptionEnum<InfillPattern>>("top_surface_pattern")->value == InfillPattern::ipOctagramSpiral;
-    bool is_bottom_infill_centered = config->option<ConfigOptionEnum<InfillPattern>>("bottom_surface_pattern")->value == InfillPattern::ipArchimedeanChords ||
-                                     config->option<ConfigOptionEnum<InfillPattern>>("bottom_surface_pattern")->value == InfillPattern::ipOctagramSpiral;
-    toggle_line("center_of_surface_pattern", (has_top_shell && is_top_infill_centered) || (has_bottom_shell && is_bottom_infill_centered));
-
-    // Orca: anisotropic surfaces.
-    auto is_anisotropic_pattern = [](InfillPattern p) {
-        return p == InfillPattern::ipArchimedeanChords || p == InfillPattern::ipOctagramSpiral || p == InfillPattern::ipHilbertCurve;
+    // Orca: Archimedean Chords and Octagram Spiral are the centered surface patterns that the
+    // pattern-centering, anisotropic-surface and separated-infill features act on.
+    auto is_centered_pattern = [](InfillPattern p) {
+        return p == InfillPattern::ipArchimedeanChords || p == InfillPattern::ipOctagramSpiral;
     };
-    bool is_top_anisotropic    = is_anisotropic_pattern(config->option<ConfigOptionEnum<InfillPattern>>("top_surface_pattern")->value);
-    bool is_bottom_anisotropic = is_anisotropic_pattern(config->option<ConfigOptionEnum<InfillPattern>>("bottom_surface_pattern")->value);
-    toggle_line("anisotropic_surfaces", (has_top_shell && is_top_anisotropic) || (has_bottom_shell && is_bottom_anisotropic));
+    bool is_top_centered    = is_centered_pattern(config->option<ConfigOptionEnum<InfillPattern>>("top_surface_pattern")->value);
+    bool is_bottom_centered = is_centered_pattern(config->option<ConfigOptionEnum<InfillPattern>>("bottom_surface_pattern")->value);
+    bool has_centered_surface = (has_top_shell && is_top_centered) || (has_bottom_shell && is_bottom_centered);
+
+    // Orca: center of surface pattern / anisotropic surfaces
+    toggle_line("center_of_surface_pattern", has_centered_surface);
+    toggle_line("anisotropic_surfaces", has_centered_surface);
 
     // Orca: separate infills
-    bool is_internal_infill_centered = config->option<ConfigOptionEnum<InfillPattern>>("sparse_infill_pattern")->value == InfillPattern::ipArchimedeanChords ||
-                                       config->option<ConfigOptionEnum<InfillPattern>>("sparse_infill_pattern")->value == InfillPattern::ipOctagramSpiral ||
+    bool is_internal_infill_centered = is_centered_pattern(config->option<ConfigOptionEnum<InfillPattern>>("sparse_infill_pattern")->value) ||
                                        config->opt_string("sparse_infill_rotate_template") != "" ||
-                                       config->opt_string("solid_infill_rotate_template") != "" ;
+                                       config->opt_string("solid_infill_rotate_template") != "";
     toggle_line("separated_infills", is_internal_infill_centered);
 
     // Orca: no need gaps
