@@ -389,6 +389,13 @@ static ExtrusionEntityCollection traverse_extrusions(const PerimeterGenerator& p
         ExtrusionPaths paths, paths_complex; // paths_complex - is a complex pathlines 
         
         // Orca: detect complex paths and sort its
+        // Complex paths are programically arise during the loop transformation process, for ex. of fuzzy skin.
+        // They may contain additional extrusion lines, for example, to close voids or gaps that occur during the generation of new walls.
+        // They are transmitted in the basic petri vector, but they have a unique index. For example, to create an additional internal contour, the value 10000 is selected.
+        // You can choose any other value above this to define any other roles for extrusion or traveling.
+        // Complex lines are split into separate lines by introducing a zero width into the sequence.
+        // The extrusion width of 1 does not interrupt the line, but it will not be printed due to the ultra-low flow rate.
+        
         if (std::any_of(extrusion->junctions.begin(), extrusion->junctions.end(), [](Arachne::ExtrusionJunction j) {return j.perimeter_index > 100000;})) {
             Arachne::ExtrusionLine el_extrusion(*extrusion);
             el_extrusion.junctions.clear();
@@ -411,7 +418,8 @@ static ExtrusionEntityCollection traverse_extrusions(const PerimeterGenerator& p
             if (el_complex.size() > 1) 
                 extrusion_paths_append(paths_complex, std::move(el_complex), ExtrusionRole::erPerimeter, perimeter_generator.ext_perimeter_flow);
 
-            if (el_extrusion.size() > 1) { // fill only ordinary paths
+            // After filtering, return the non-complex paths to the parent vector.
+            if (el_extrusion.size() > 1) { 
                 extrusion->junctions.clear();
                 for (auto &ej : el_extrusion.junctions)
                     extrusion->junctions.emplace_back(std::move(ej));
