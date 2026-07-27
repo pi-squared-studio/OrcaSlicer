@@ -949,18 +949,16 @@ void group_region_by_fuzzify(PerimeterGenerator& g)
                                   _wall_width,
                                   scaled<coord_t>(std::max(float(g.layer_height), g.ext_perimeter_flow.spacing()) * 0.215)}; // param * (1. - 0.25 * PI)};
 
-        auto&                 surfaces = regions[cfg];};
-
         auto it = std::find_if(regions.begin(), regions.end(), [&cfg](const ConfigSurfaces& item) {
             return item.config == cfg;
         });
+
         if (it == regions.end()) {
             regions.push_back({cfg, {}});
             it = regions.end() - 1;
         }
 
         auto& surfaces = it->surfaces;
-
         for (const auto& surface : region->slices.surfaces) {
             surfaces.push_back(&surface);
         }

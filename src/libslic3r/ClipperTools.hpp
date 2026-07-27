@@ -10,76 +10,76 @@
 #include "libslic3r/Arachne/utils/ExtrusionJunction.hpp"
 
 /*
-    ---------------------------------------------------------------------------
-    Common functions for converting Clipper geometry
-    The basis has been proposed by @pi-squared-studio for Orca Slicer
-    They may need to be standardized and assigned to their respective classes.
-    Some conversion functions work with data loss due to their nature of description.
-    The reverse conversion does not always give an equivalent result, so be sure that these losses will not affect the one.
+---------------------------------------------------------------------------
+Common functions for converting Clipper geometry
+The basis has been proposed by @pi-squared-studio for Orca Slicer
+They may need to be standardized and assigned to their respective classes.
+Some conversion functions work with data loss due to their nature of description.
+The reverse conversion does not always give an equivalent result, so be sure that these losses will not affect the one.
 
-    Attention: This library may contain some errors or unexpected results, so please check the correctness of these functions by debug drawings!
+Attention: This library may contain some errors or unexpected results, so please check the correctness of these functions by debug drawings!
 
-    ---------------------------------------------------------------------------
+---------------------------------------------------------------------------
 
-    Basic principles of converting lines to polylines and vice versa:
+Basic principles of converting lines to polylines and vice versa:
 
-    Polyline:                                                    Polylines:
-                a      b      c      d                           a      b      c      d
-    coords -  *------*------*------*--- ...                    *------*      *------*--- ...
-                r1     r2     r3    r4                          l1r1          l2r1   l2r2
+Polyline:                                                    Polylines:
+          a      b      c      d                           a      b      c      d
+coords -  *------*------*------*--- ...                    *------*      *------*--- ...
+          r1     r2     r3    r4                              l1r1          l2r1   l2r2
 
-    Lines (without the gaps, it is perceived as a polyline):     Lines (with a gap within end coordinates):
-                a1   b1=b2  c1=c2  d1=d2                         a      b      c    d1=d2
-    coords -  *------**-----**-----**-- ...                    *------*      *-----**--- ...
-                    l1     l2     l3     l4                         l1            l2     l3
+Lines (without the gaps, it is perceived as a polyline):     Lines (with a gap within end coordinates):
+          a1   b1=b2  c1=c2  d1=d2                         a      b      c    d1=d2
+coords -  *------**-----**-----**-- ...                    *------*      *-----**--- ...
+             l1     l2     l3     l4                         l1            l2     l3
 
 
-    Basic principles of converting lines to polylines with equal thickness and vice versa
+Basic principles of converting lines to polylines with equal thickness and vice versa
 
-    ThickPolyline with equal widths:             ThickPolyline with different widths:     ThickPolylines:
-                a      b      c      d           a      b      c      d                   a      b      c      d
-    coords -  *------*------*------*--- ...    *------*------*------*--- ...            *------*      *------*--- ...
-    widths -  *-----*-*----*-*----*-*--        *-----*-*----*-*----*-*--                *------*      *-----*-*--
-                w1   w1=w1  w1=w1  w1=w1         w1   w1 w2  w2 w3  w4=w4                 w1     w1     w1   w1=w1
+ThickPolyline with equal widths:           ThickPolyline with different widths:     ThickPolylines:
+          a      b      c      d           a      b      c      d                   a      b      c      d
+coords -  *------*------*------*--- ...    *------*------*------*--- ...            *------*      *------*--- ...
+widths -  *-----*-*----*-*----*-*--        *-----*-*----*-*----*-*--                *------*      *-----*-*--
+          w1   w1=w1  w1=w1  w1=w1         w1   w1 w2  w2 w3  w4=w4                 w1     w1     w1   w1=w1
 
-    Lines:                                                                                Lines (with the gaps. Zero width (w0) = 0):
-                a1   b1=b2  c1=c2  d1=d2         a1    b1=b2  c1=c2  d1=d2                a1    b1=b2    c1=c2  d1=d2
-    coords -  *------**-----**-----**-- ...    *------**-----**-----**-- ...            *------**-------**-----**-- ...
-    widths -  *------**-----**-----**--        *------**-----**-----**--                *------**_______**-----**-- ...
-                w1   w1=w1  w1=w1   w1=w1        w1    w1 w2  w2 w3  w4=w4                w1    w1 w0 = w0 w1   w1=w1
+Lines:                                                                              Lines (with the gaps. Zero width (w0) = 0):
+          a1   b1=b2  c1=c2  d1=d2         a1    b1=b2  c1=c2  d1=d2                a1    b1=b2    c1=c2  d1=d2
+coords -  *------**-----**-----**-- ...    *------**-----**-----**-- ...            *------**-------**-----**-- ...
+widths -  *------**-----**-----**--        *------**-----**-----**--                *------**_______**-----**-- ...
+          w1   w1=w1  w1=w1   w1=w1        w1    w1 w2  w2 w3  w4=w4                w1    w1 w0 = w0 w1   w1=w1
 
-    Extrusion junctions:                         Extrusion junctions with diff. widths:   Extrusion junctions (with the gaps. Zero width (w0)
-    = 1 is a minimal extrusion line):
-                a      b      c      d           a    b1=b2  c1=c2  d1=d2                 a1    b1=b2    c1=c2    d1
-    coords -  *------*------*------*--- ...    *-----*-*----*-*----*-*--- ...           *-----*--*-----*--*-----*-- ...
-    widths -  *------*------*------*---        *-----*-*----*-*----*-*---               *-----*-_*_____*_-*-----*-- ...
-                w1     w1     w1     w1          w1   w1 w2  w2 w3  w4=w4                 w1   w1  w0 = w0  w1    w1
+Extrusion junctions:                       Extrusion junctions with diff. widths:   Extrusion junctions (with the gaps. Zero width (w0) = 1 
+                                                                                                           is a minimal extrusion line):
+          a      b      c      d           a    b1=b2  c1=c2  d1=d2                 a1    b1=b2    c1=c2    d1
+coords -  *------*------*------*--- ...    *-----*-*----*-*----*-*--- ...           *-----*--*-----*--*-----*-- ...
+widths -  *------*------*------*---        *-----*-*----*-*----*-*---               *-----*-_*_____*_-*-----*-- ...
+          w1     w1     w1     w1          w1   w1 w2  w2 w3  w4=w4                 w1   w1  w0 = w0  w1    w1
 
-    3D polyline copies the Extrusion junctions logic, except that a zero line width (w0) is equal to 0.
-    The third coordinate in this system represents the width of the line.
-    This conversion is quite useful, for ex. for simplifying thick lines.
-    You can use the z_factor (width_factor) parameter to filter points by width more accurately.
+3D polyline copies the Extrusion junctions logic, except that a zero line width (w0) is equal to 0.
+The third coordinate in this system represents the width of the line.
+This conversion is quite useful, for ex. for simplifying thick lines.
+You can use the z_factor (width_factor) parameter to filter points by width more accurately.
 
-    ---------------------------------------------------------------------------
+---------------------------------------------------------------------------
 
-    Introducing an extrusion line representation allows you to lossless transform the path, for example, when reversing.
-    All closed lines in all represent systems have the same coordinates of endpoints.
-    No additional sending paraneters is required if this condition is met.
-    Parameter 'close': You can force the line to become closed without creating unnecessary elements.
-    Parameter 'separate_lines': Forcibly splits (thick)lines into polylines if necessary and according to the above rule.
+Introducing an extrusion line representation allows you to lossless transform the path, for example, when reversing.
+All closed lines in all represent systems have the same coordinates of endpoints.
+No additional sending paraneters is required if this condition is met.
+Parameter 'close': You can force the line to become closed without creating unnecessary elements.
+Parameter 'separate_lines': Forcibly splits (thick)lines into polylines if necessary and according to the above rule.
 
-    ---------------------------------------------------------------------------
+---------------------------------------------------------------------------
     
-    *** Contours ***
-    The concept of contour is also introduced.
-    This is a closed polyline or a set of them (polylines) that always describe the outer shell.
-    When converting, it is possible to created multiple contortus from a single one, but these are will be treated as a single
-    contour when used later. Contours can have a rotation direction that defines the outer and inner (hole) shapes, but often
-    requires positive logic for Clipper conversion. Since the definition of area rotation can vary between systems (for example,
-    Clipper and Slicer Model's Path), a clear understanding of how such a procedure will work is required.
-    Contour conversion functions must always restore the original traversal direction for their results.
+*** Contours ***
+The concept of contour is also introduced.
+This is a closed polyline or a set of them (polylines) that always describe the outer shell.
+When converting, it is possible to created multiple contortus from a single one, but these are will be treated as a single
+contour when used later. Contours can have a rotation direction that defines the outer and inner (hole) shapes, but often
+requires positive logic for Clipper conversion. Since the definition of area rotation can vary between systems (for example,
+Clipper and Slicer Model's Path), a clear understanding of how such a procedure will work is required.
+Contour conversion functions must always restore the original traversal direction for their results.
 
-    ---------------------------------------------------------------------------
+---------------------------------------------------------------------------
 */
 
 using Slic3r::ClipperLib::jtMiter;
@@ -275,27 +275,27 @@ bool contour_intersection(Line line, Polylines polylines, Point* intersection, b
 bool contour_contains(Polylines& polylines, Point& point);
 
 /*
-    FILTERING:
-    Short curls are artifacts that remain as a result of applying the polylines blending or polygon union/intersection/clippng procedure.
-    Since the perimeter length of such curls is usually a multiple of the offset ramge, an effective filtering function can be applied.
-    The entire polyline is viewed, and if there is an self-intersection at a certain length, then this segment is cut out of the polyline.
+FILTERING:
+Short curls are artifacts that remain as a result of applying the polylines blending or polygon union/intersection/clippng procedure.
+Since the perimeter length of such curls is usually a multiple of the offset ramge, an effective filtering function can be applied.
+The entire polyline is viewed, and if there is an self-intersection at a certain length, then this segment is cut out of the polyline.
 
-    Orign polyline:      Negative offsetted line:         Cropped lines:
+Orign polyline:      Negative offsetted line:         Cropped lines:
 
-    ---------------+                       |\ d
-                   |                       | \
-                   |        a             b|  \            a               b
-                   |   ->   ---------------*---' c   ->    ---------------+
-                   |                       |                              |
-                   |                       | e                            | e
+ ---------------+                       |\ d
+                |                       | \
+                |        a             b|  \            a               b
+                |   ->   ---------------*---' c   ->    ---------------+
+                |                       |                              |
+                |                       | e                            | e
 
-    Let's assume that the results polyline extends from 'a' point.
-    All short self-intersections are checked for the value of curl_length starting from 'c' point.
-    If the positive value of 'curl_length' exceeds the total distance of the segments 'cd'+'db',
-    the extra loop 'cdb' will be rejected. For most cases, this parameter should be 3-4 times the offset length. When the 'curl_length' parameter
-    is negative, overap range 'cd' will not be account. A distance of 1-2 times of absolute value 'curl_length' will be enough.
-    But for larger angles, an even greater value will be required, which in turn can affect the quality of the resulting shape.
-    If several intersections are found at this length, the subsequent line construction will occur from the last point.
+Let's assume that the results polyline extends from 'a' point.
+All short self-intersections are checked for the value of curl_length starting from 'c' point.
+If the positive value of 'curl_length' exceeds the total distance of the segments 'cd'+'db',
+the extra loop 'cdb' will be rejected. For most cases, this parameter should be 3-4 times the offset length. When the 'curl_length' parameter
+is negative, overap range 'cd' will not be account. A distance of 1-2 times of absolute value 'curl_length' will be enough.
+But for larger angles, an even greater value will be required, which in turn can affect the quality of the resulting shape.
+If several intersections are found at this length, the subsequent line construction will occur from the last point.
 */
 
 
