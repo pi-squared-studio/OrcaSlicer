@@ -13,6 +13,8 @@
 
 namespace Slic3r { namespace GUI {
 
+std::vector<InputShaperType> input_shaper_types_for_flavor(GCodeFlavor flavor);
+
 namespace {
 
 void ParseStringValues(std::string str, std::vector<double> &vec)
@@ -36,18 +38,29 @@ std::vector<std::string> get_shaper_type_values()
 {
     if (auto* preset_bundle = wxGetApp().preset_bundle) {
         auto printer_config = &preset_bundle->printers.get_edited_preset().config;
-        if (auto* gcode_flavor_option = printer_config->option<ConfigOptionEnum<GCodeFlavor>>("gcode_flavor")) {
-            switch (gcode_flavor_option->value) {
-            case GCodeFlavor::gcfKlipper:
-                return {"Default", "ZV", "MZV", "ZVD", "EI", "2HUMP_EI", "3HUMP_EI"};
-            case GCodeFlavor::gcfRepRapFirmware:
-                return {"Default", "MZV", "ZVD", "ZVDD", "ZVDDD", "EI2", "EI3", "DAA"};
-            case GCodeFlavor::gcfMarlinFirmware:
-                return {"ZV"};
-            default:
-                break;
+        const auto* gcode_flavor_option = printer_config->option<ConfigOptionEnum<GCodeFlavor>>("gcode_flavor");
+        const ConfigOptionDef* def = printer_config->def()->get("input_shaping_type");
+        if (gcode_flavor_option) {
+            auto types = input_shaper_types_for_flavor(gcode_flavor_option->value);
+            if (!types.empty()) {
+                std::vector<std::string> values;
+                values.reserve(types.size());
+                for (InputShaperType type : types) {
+                    if (type == InputShaperType::Disable)
+                        continue;
+                    const size_t idx = static_cast<size_t>(type);
+                    if (def && idx < def->enum_values.size())
+                        values.push_back(def->enum_values[idx]);
+                    else
+                        values.push_back(std::to_string(static_cast<int>(type)));
+                }
+                if (!values.empty())
+                    return values;
             }
         }
+
+        if (def && !def->enum_values.empty())
+            return {def->enum_values.front()};
     }
     return {"Default"};
 }
@@ -1458,12 +1471,24 @@ FlowRateCalibrationDialog::FlowRateCalibrationDialog(wxWindow* parent, wxWindowI
     type_box->Add(m_rbType, 0, wxALL | wxEXPAND, FromDIP(4));
     v_sizer->Add(type_box, 0, wxTOP | wxRIGHT | wxLEFT | wxEXPAND, FromDIP(10));
 
-    // Pattern selection
-    auto labeled_box_pattern = new LabeledStaticBox(this, _L("Top Surface Pattern"));
-    auto pattern_box = new wxStaticBoxSizer(labeled_box_pattern, wxVERTICAL);
+    // Settings
+    auto stb = new LabeledStaticBox(this, _L("Settings"));
+    auto settings_sizer = new wxStaticBoxSizer(stb, wxVERTICAL);
+
+    wxString pattern_str = _L("Top Surface Pattern");
+    int text_max = GetTextMax(this, std::vector<wxString>{pattern_str});
+
+    settings_sizer->AddSpacer(FromDIP(5));
+
+    auto st_size = wxSize(text_max, -1);
+    auto ti_size = FromDIP(wxSize(120, -1));
+
+    // Top surface pattern
+    auto pattern_sizer = new wxBoxSizer(wxHORIZONTAL);
+    auto pattern_text  = new wxStaticText(this, wxID_ANY, pattern_str, wxDefaultPosition, st_size, wxALIGN_LEFT);
 
     // ORCA: Use ComboBox with icons instead of RadioGroup
-    m_rbPattern = new ComboBox(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0, nullptr, wxCB_READONLY);
+    m_rbPattern = new ComboBox(this, wxID_ANY, wxEmptyString, wxDefaultPosition, ti_size, 0, nullptr, wxCB_READONLY);
     
     boost::filesystem::path image_path(Slic3r::resources_dir());
     image_path /= "images";
@@ -1484,16 +1509,20 @@ FlowRateCalibrationDialog::FlowRateCalibrationDialog(wxWindow* parent, wxWindowI
     m_rbPattern->SetSelection(0); // Default to Archimedean Chords
     // ORCA: explicit set value to ensure display on Windows
     m_rbPattern->SetValue(m_rbPattern->GetString(0));
+    m_rbPattern->GetDropDown().SetUseContentWidth(true);
 
-    pattern_box->Add(m_rbPattern, 0, wxALL | wxEXPAND, FromDIP(4));
-    v_sizer->Add(pattern_box, 0, wxTOP | wxRIGHT | wxLEFT | wxEXPAND, FromDIP(10));
+    pattern_sizer->Add(pattern_text, 0, wxALL | wxALIGN_CENTER_VERTICAL, FromDIP(2));
+    pattern_sizer->Add(m_rbPattern , 0, wxALL | wxALIGN_CENTER_VERTICAL, FromDIP(2));
+    settings_sizer->Add(pattern_sizer, 0, wxLEFT, FromDIP(3));
+
+    v_sizer->Add(settings_sizer, 0, wxTOP | wxRIGHT | wxLEFT | wxEXPAND, FromDIP(10));
 
     v_sizer->AddSpacer(FromDIP(5));
 
     auto dlg_btns = new DialogButtons(this, {"OK"});
 
     auto bottom_sizer = new wxBoxSizer(wxHORIZONTAL);
-    auto wiki = new HyperLink(this, _L("Wiki Guide"), "https://www.orcaslicer.com/wiki/calibration/flow-ratio-calib");
+    auto wiki = new HyperLink(this, _L("Wiki Guide"), "https://www.orcaslicer.com/wiki/flow_ratio_calib");
     bottom_sizer->Add(wiki, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(20));
     bottom_sizer->AddStretchSpacer();
     bottom_sizer->Add(dlg_btns, 0, wxEXPAND);
@@ -1505,6 +1534,7 @@ FlowRateCalibrationDialog::FlowRateCalibrationDialog(wxWindow* parent, wxWindowI
 
     Layout();
     Fit();
+    v_sizer->SetSizeHints(this);
 }
 
 FlowRateCalibrationDialog::~FlowRateCalibrationDialog() {
@@ -1527,7 +1557,6 @@ void FlowRateCalibrationDialog::on_start(wxCommandEvent& event) {
 
 void FlowRateCalibrationDialog::on_dpi_changed(const wxRect& suggested_rect) {
     this->Refresh();
-    Fit();
 }
 
 }} // namespace Slic3r::GUI
