@@ -171,10 +171,21 @@ void Fill::fill_surface_extrusion(const Surface* surface, const FillParams& para
                 if (params.extrusion_role == erTopSolidInfill)
                     eec->no_sort = true;
                 break;
-			case CalibMode::Calib_Practical_Flowratio: 
+			      case CalibMode::Calib_Practical_Flowratio: 
                 if (layer_id > 3)
                     eec->no_sort = true;
             }
+
+        // ORCA: special flag for flow rate calibration
+        auto is_flow_calib = params.extrusion_role == erTopSolidInfill && this->calib_params != nullptr &&
+                             this->calib_params->mode == CalibMode::Calib_Flow_Rate;
+        // Orca: a forced surface fill order must survive the G-code path planner, which would
+        // otherwise re-chain and possibly reverse the paths. The same applies to the flow rate
+        // calibration's special toolpath order.
+        const bool keep_fill_order = params.fill_order != SurfaceFillOrder::Default;
+        if (is_flow_calib || keep_fill_order) {
+            eec->no_sort = true;
+
         }
 
         // Extrusion section
@@ -189,6 +200,11 @@ void Fill::fill_surface_extrusion(const Surface* surface, const FillParams& para
                 eec->entities, std::move(polylines),
                 params.extrusion_role,
                 flow_mm3_per_mm, float(flow_width), params.flow.height());
+        }
+
+        if (!params.can_reverse || is_flow_calib || keep_fill_order) {
+            for (size_t i = idx; i < eec->entities.size(); i++)
+                eec->entities[i]->set_reverse();
         }
 
         // Calibration section (post-extrusion) with sended parameters
@@ -1104,7 +1120,7 @@ void mark_boundary_segments_touching_infill(
 #endif // INFILL_DEBUG_OUTPUT
 
 	EdgeGrid::Grid grid;
-    // Make sure that the the grid is big enough for queries against the thick segment.
+    // Make sure that the grid is big enough for queries against the thick segment.
 	grid.set_bbox(boundary_bbox.inflated(distance_colliding * 1.43));
 	// Inflate the bounding box by a thick line width.
 	grid.create(boundary, coord_t(std::max(clip_distance, distance_colliding) + scale_(10.)));
