@@ -874,7 +874,7 @@ Polyline combine(Polyline polyline1, Polyline polyline2)
     return polyline1;
 };
 
-Polylines combine_3(const Polylines& polylines1, Polylines& polylines2, Polylines& polylines3)
+Polylines combine_3(const Polylines& polylines1, Polylines polylines2, Polylines polylines3)
 {
     Polylines out;
     for (auto pl : polylines1) {

@@ -354,7 +354,7 @@ Polyline combine(Polyline polyline1, Polyline polyline2);
 
 // Combines three contours (closed polylines).
 // First, the union operation is performed, followed by the intersection operation in the required order.
-Polylines combine_3(const Polylines& polylines1, Polylines& polylines2 = Polylines(), Polylines& polylines3 = Polylines());
+Polylines combine_3(const Polylines& polylines1, Polylines polylines2 = Polylines(), Polylines polylines3 = Polylines());
 
 // Combines two contours (closed polylines).
 // First, the union operation is performed, followed by the intersection operation in the required order.
