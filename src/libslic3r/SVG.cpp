@@ -496,7 +496,7 @@ void draw(SVG& svg, const ThickLines& lines, std::string stroke, double stroke_w
         if (tls.size())
             svg.draw(tls, stroke, stroke, stroke_width, true);
     } else {
-        Polyline& pl(::Slic3r::to_polyline(lines));
+        Polyline pl(::Slic3r::to_polyline(lines));
         if (arrow) {
             Point a(lines[0].a);
             Points points{a, a + perp(_v), a + _v * 3, a - perp(_v)};
