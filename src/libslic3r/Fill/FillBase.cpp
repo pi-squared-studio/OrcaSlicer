@@ -171,14 +171,15 @@ void Fill::fill_surface_extrusion(const Surface* surface, const FillParams& para
                 if (params.extrusion_role == erTopSolidInfill)
                     eec->no_sort = true;
                 break;
-			      case CalibMode::Calib_Practical_Flowratio: 
+            case CalibMode::Calib_Practical_Flowratio:
                 if (layer_id > 3)
                     eec->no_sort = true;
             }
-
+        }
         // ORCA: special flag for flow rate calibration
         auto is_flow_calib = params.extrusion_role == erTopSolidInfill && this->calib_params != nullptr &&
                              this->calib_params->mode == CalibMode::Calib_Flow_Rate;
+        
         // Orca: a forced surface fill order must survive the G-code path planner, which would
         // otherwise re-chain and possibly reverse the paths. The same applies to the flow rate
         // calibration's special toolpath order.

@@ -51,6 +51,8 @@ struct Calib_Params
     // When false the 0.4 mm / 0.2 mm reference model is printed as-is.
     bool nozzle_based_resize = true;
 
+    bool print_ruler, use_zhop, interlaced;
+    int model_variant;
     CalibMode mode;
 };
 
