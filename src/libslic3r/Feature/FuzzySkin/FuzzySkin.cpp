@@ -381,7 +381,8 @@ static inline void place_point(Arachne::ExtrusionJunction& j, Arachne::Extrusion
         m.push_back(j);
 }
 
-static inline void place_point(Vec2d p, coord_t w, coord_t perimeter_index, Arachne::ExtrusionJunctions& m, size_t tolerance) { place_point(Arachne::ExtrusionJunction(p.cast<coord_t>(), w, perimeter_index), m, tolerance); }
+//static inline void place_point(Vec2d p, coord_t w, coord_t perimeter_index, Arachne::ExtrusionJunctions& m, size_t tolerance) 
+//    { place_point(Arachne::ExtrusionJunction(p.cast<coord_t>(), w, perimeter_index), m, tolerance); }
 
 static void fuzzy_point(Vec2d vector, Arachne::ExtrusionJunction j, FuzzySkinParams& p) {
     Vec2d point(j.p.cast<double>());
@@ -396,11 +397,11 @@ static void fuzzy_point(Vec2d vector, Arachne::ExtrusionJunction j, FuzzySkinPar
     Arachne::ExtrusionJunction j2(new_point.cast<coord_t>(), 0, -1);
     switch (p.current_mode) {
     case FuzzySkinMode::Displacement: // classical algorithm, no any changed, two-way expansion
-        place_point(new_point, j.w, index, p.out, SCALED_EPSILON);
+        place_point({new_point, j.w, index}, p.out, SCALED_EPSILON);
         break;
     case FuzzySkinMode::Displacement_plus: // classical algorithm, one-way expansion
         if (p.draw_line)
-            place_point(new_point, j.w, index, p.out, SCALED_EPSILON);
+            place_point({new_point, j.w, index}, p.out, SCALED_EPSILON);
          if (p.draw_fill) {
             counter = p.params[0] / real_width;
             if ((counter != p.params[1]) || p.draw_required) {
@@ -437,22 +438,24 @@ static void fuzzy_point(Vec2d vector, Arachne::ExtrusionJunction j, FuzzySkinPar
     case FuzzySkinMode::Extrusion:
         if (p.cfg.point_distance >= limit || counter != p.params[1]) {
             p.params[1] = counter;
-            place_point(point, std::max(double(p.cfg.thickness) - distance, double(p.cfg.minimal_line)), index, p.out, SCALED_EPSILON);
+            place_point({point, std::max(double(p.cfg.thickness) - distance, double(p.cfg.minimal_line)), index}, p.out, SCALED_EPSILON);
         }
         break;
     case FuzzySkinMode::Combined:
         if (p.cfg.point_distance >= limit || counter != p.params[1]) {
             p.params[1] = counter;
             distance   += p.cfg.minimal_line;
-            place_point(point + norm * (distance - real_width) * 0.5, distance, index, p.out, SCALED_EPSILON);
+            place_point({point + norm * (distance - real_width) * 0.5, distance, index}, p.out, SCALED_EPSILON);
         }
         break;
     case FuzzySkinMode::Fur:
         if (p.cfg.point_distance >= limit || counter != p.params[1] || p.draw_required) {
             p.params[1] = counter;
-            place_point(!p.draw_required && (p.params[2]++ % 2) ?
-                            (p.one_way_expansion ? (p.draw_corner ? point + norm * distance * 0.5 : point) : point - vector) : new_point,
-                             p.cfg.point_distance < wall_width ? wall_width * p.cfg.point_distance / real_width : real_width, index, p.out, SCALED_EPSILON);
+            place_point({!p.draw_required && (p.params[2]++ % 2) ?
+                             (p.one_way_expansion ? (p.draw_corner ? point + norm * distance * 0.5 : point) : point - vector) :
+                             new_point,
+                         p.cfg.point_distance < wall_width ? wall_width * p.cfg.point_distance / real_width : real_width, index},
+                        p.out, SCALED_EPSILON);
         }
         break;
     }
@@ -469,7 +472,8 @@ static void fuzzy_point(Vec2d vector, Arachne::ExtrusionJunction j, FuzzySkinPar
 // At the end of the process, the resulting extrusion line is finally filtered to ensure unparalleled print quality.
 // For clarity, the debugging section (DEBUG_FUZZY) was modified so that you can see all the features of the algorithms being used.
 
-static void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice_z, const FuzzySkinConfig& cfg, bool closed) {
+static void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice_z, const FuzzySkinConfig& cfg, bool closed)
+{
     if (cfg.noise_type == NoiseType::Ripple) {
         if (ext_lines.size() < 3)
             return;
@@ -508,7 +512,7 @@ static void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_
     bool         one_way   = cfg.mode == FuzzySkinMode::Displacement_plus || cfg.mode == FuzzySkinMode::Combined || cfg.mode == FuzzySkinMode::Fur;
     
     // Return if the line too short or has undesired index
-    if (closed && overall < FILTER_IN_LENGTH || (index > 0 && one_way))
+    if ((closed && overall < FILTER_IN_LENGTH) || (index > 0 && one_way))
         return;
 
     const bool is_random   = cfg.noise_type == NoiseType::Classic || cfg.mode == FuzzySkinMode::Fur;
