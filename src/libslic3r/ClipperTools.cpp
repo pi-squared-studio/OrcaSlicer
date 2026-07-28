@@ -16,6 +16,7 @@
 
 using Lines = std::vector<Slic3r::Line>;
 using ThickLine = std::vector<Slic3r::ThickLines>;
+using Polylines = std::vector<Slic3r::Polyline>;
 using ThickPolylines = std::vector<Slic3r::ThickPolyline>;
 using Line = Slic3r::Line;
 using ThickPolyline = Slic3r::ThickPolyline;
