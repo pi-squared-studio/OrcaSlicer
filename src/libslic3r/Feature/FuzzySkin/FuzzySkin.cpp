@@ -394,14 +394,15 @@ static void fuzzy_point(Vec2d vector, Arachne::ExtrusionJunction j, FuzzySkinPar
     const coord_t limit = real_width / 8;
     const coord_t index = j.perimeter_index;
     coord_t counter = p.params[0] / std::min(p.cfg.point_distance, limit); // reduce resolution up to wall real_width (nozzle dizmeter);
+    Arachne::ExtrusionJunction j1(new_point.cast<coord_t>(), j.w, index);
     Arachne::ExtrusionJunction j2(new_point.cast<coord_t>(), 0, -1);
     switch (p.current_mode) {
     case FuzzySkinMode::Displacement: // classical algorithm, no any changed, two-way expansion
-        place_point({new_point, j.w, index}, p.out, SCALED_EPSILON);
+        place_point(j1, p.out, SCALED_EPSILON);
         break;
     case FuzzySkinMode::Displacement_plus: // classical algorithm, one-way expansion
         if (p.draw_line)
-            place_point({new_point, j.w, index}, p.out, SCALED_EPSILON);
+            place_point(j1, p.out, SCALED_EPSILON);
          if (p.draw_fill) {
             counter = p.params[0] / real_width;
             if ((counter != p.params[1]) || p.draw_required) {
@@ -438,24 +439,33 @@ static void fuzzy_point(Vec2d vector, Arachne::ExtrusionJunction j, FuzzySkinPar
     case FuzzySkinMode::Extrusion:
         if (p.cfg.point_distance >= limit || counter != p.params[1]) {
             p.params[1] = counter;
-            place_point({point, std::max(double(p.cfg.thickness) - distance, double(p.cfg.minimal_line)), index}, p.out, SCALED_EPSILON);
+            j1.p        = point.cast<coord_t>();
+            j1.w        = std::max(double(p.cfg.thickness) - distance, double(p.cfg.minimal_line));
+            place_point(j1, p.out, SCALED_EPSILON);
         }
         break;
     case FuzzySkinMode::Combined:
         if (p.cfg.point_distance >= limit || counter != p.params[1]) {
             p.params[1] = counter;
             distance   += p.cfg.minimal_line;
-            place_point({point + norm * (distance - real_width) * 0.5, distance, index}, p.out, SCALED_EPSILON);
+            j1.p = (point + norm * (distance - real_width) * 0.5).cast<coord_t>();
+            j1.w = distance;
+            place_point(j1, p.out, SCALED_EPSILON);
         }
         break;
     case FuzzySkinMode::Fur:
         if (p.cfg.point_distance >= limit || counter != p.params[1] || p.draw_required) {
             p.params[1] = counter;
-            place_point({!p.draw_required && (p.params[2]++ % 2) ?
-                             (p.one_way_expansion ? (p.draw_corner ? point + norm * distance * 0.5 : point) : point - vector) :
-                             new_point,
-                         p.cfg.point_distance < wall_width ? wall_width * p.cfg.point_distance / real_width : real_width, index},
-                        p.out, SCALED_EPSILON);
+            j1.p        = (!p.draw_required && (p.params[2]++ % 2) ?
+                               (p.one_way_expansion ? (p.draw_corner ? point + norm * distance * 0.5 : point) : point - vector) :
+                               new_point).cast<coord_t>();
+            j1.w        = p.cfg.point_distance < wall_width ? wall_width * p.cfg.point_distance / real_width : real_width;
+            place_point(j1, p.out, SCALED_EPSILON);
+            //place_point({(!p.draw_required && (p.params[2]++ % 2) ?
+            //                 (p.one_way_expansion ? (p.draw_corner ? point + norm * distance * 0.5 : point) : point - vector) :
+            //                  new_point).cast<coord_t>(),
+            //             p.cfg.point_distance < wall_width ? wall_width * p.cfg.point_distance / real_width : real_width, index},
+            //            p.out, SCALED_EPSILON);
         }
         break;
     }
@@ -472,8 +482,7 @@ static void fuzzy_point(Vec2d vector, Arachne::ExtrusionJunction j, FuzzySkinPar
 // At the end of the process, the resulting extrusion line is finally filtered to ensure unparalleled print quality.
 // For clarity, the debugging section (DEBUG_FUZZY) was modified so that you can see all the features of the algorithms being used.
 
-static void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice_z, const FuzzySkinConfig& cfg, bool closed)
-{
+static void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_t slice_z, const FuzzySkinConfig& cfg, bool closed) {
     if (cfg.noise_type == NoiseType::Ripple) {
         if (ext_lines.size() < 3)
             return;
@@ -793,7 +802,7 @@ static void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_
         // filtered outer fuzzy skin contour
         if (cfg.mode == FuzzySkinMode::Displacement_plus) {
             const Polyline  fuzzy_filtered(filter_curls_reject(raw_contour, FILTER_CURLS));
-            const Polylines fuzzy_contours(is_loop ? filter_contour(fuzzy_filtered, Polygon(fuzzy_shell_limit.points), -width_2,
+            const Polylines fuzzy_contours(is_loop ? filter_contour(fuzzy_filtered, Polygon(fuzzy_shell_limit.points), -(double)(width_2),
                                                                     FILTER_PERIMETER, FILTER_AREA, SCALED_EPSILON) : Polylines({fuzzy_filtered}));
             draw(svg, fuzzy_contours, "blue", real_width, true);
             draw(svg, fuzzy_contours, "black", width_8, false);
@@ -863,7 +872,7 @@ static void fuzzy_extrusion_line(Arachne::ExtrusionJunctions& ext_lines, coordf_
     if (cfg.mode == FuzzySkinMode::Displacement_plus) {
         const Polyline fuzzy_shell_limit(offset_by_polygon(filter_by_polygon(main_contour, -wall_width), -thickness));
         const Polyline  fuzzy_filtered(filter_curls_reject(raw_contour, FILTER_CURLS));
-        const Polylines fuzzy_contours(is_loop ? filter_contour(fuzzy_filtered, Polygon(fuzzy_shell_limit.points), -width_2,
+        const Polylines fuzzy_contours(is_loop ? filter_contour(fuzzy_filtered, Polygon(fuzzy_shell_limit.points), -(double)(width_2),
                                                                 FILTER_PERIMETER, FILTER_AREA, SCALED_EPSILON) : 
                                                                 Polylines({fuzzy_filtered}));
         out = to_extrusion(fuzzy_contours, real_width, index, false, true);
