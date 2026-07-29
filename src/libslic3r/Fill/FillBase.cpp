@@ -221,7 +221,7 @@ void Fill::fill_surface_extrusion(const Surface* surface, const FillParams& para
                 const coord_t     _width     = _bbox.size().x();
                 const coord_t     _semiwidth = _width / 2;
                 const coord_t     _xmin      = _bbox.center().x() - _semiwidth;
-                const coord_t     _xmax      = _bbox.center().x() + _semiwidth;
+                // const coord_t     _xmax      = _bbox.center().x() + _semiwidth;
                 const double      _wmin      = this->calib_params->start;
                 const double      _wmax      = this->calib_params->end;
                 const double      _wlen      = _wmax - _wmin;

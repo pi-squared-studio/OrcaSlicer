@@ -14255,8 +14255,8 @@ void Plater::calib_practical_flowratio(const Calib_Params& params) {
     model_config.set_key_value("alternate_extra_wall", new ConfigOptionBool(false));
     model_config.set_key_value("detect_thin_wall", new ConfigOptionBool(false));
     model_config.set_key_value("ironing_type", new ConfigOptionEnum<IroningType>(IroningType::NoIroning));
-    model_config.set_key_value("top_surface_speed", new ConfigOptionFloat(params.speeds[0])); // internal_solid_speed
-    model_config.set_key_value("internal_solid_infill_speed", new ConfigOptionFloat(params.speeds[0])); // internal_solid_speed
+    model_config.set_key_value("top_surface_speed", new ConfigOptionFloats{params.speeds[0]}); // internal_solid_speed
+    model_config.set_key_value("internal_solid_infill_speed", new ConfigOptionFloats{params.speeds[0]}); // internal_solid_speed
     //model_config.set_key_value("initial_layer_infill_speed", new ConfigOptionFloat(20));
     model_config.set_key_value("seam_slope_type", new ConfigOptionEnum<SeamScarfType>(SeamScarfType::None));
     model_config.set_key_value("gap_fill_target", new ConfigOptionEnum<GapFillTarget>(GapFillTarget::gftNowhere));

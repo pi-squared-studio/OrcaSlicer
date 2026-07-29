@@ -1782,12 +1782,11 @@ wxString Practical_Flow_Ratio_Test_Dlg::get_status()
                                                    filament_config->get_filament_type(),
                                                    filament_config->option<ConfigOptionFloatsNullable>("filament_flow_ratio")->get_at(0))
                                   .Trim();
-    bool read_double = false;
-    read_double      = m_tiJDStart->GetTextCtrl()->GetValue().ToDouble(&m_params.start);
-    read_double      = read_double && m_tiJDEnd->GetTextCtrl()->GetValue().ToDouble(&m_params.end);
+    bool read_double = m_tiJDStart->GetTextCtrl()->GetValue().ToDouble(&m_params.start) &&
+                       m_tiJDEnd->GetTextCtrl()->GetValue().ToDouble(&m_params.end);
     if (m_params.end < m_params.start)
         std::swap(m_params.end, m_params.start);
-    if (!read_double || m_params.start >= 0.5 && m_params.end <= 1.5) {
+    if (read_double && (m_params.start >= 0.5 && m_params.end <= 1.5)) {
         float const calib_scale[3] = {1.0f, 1.5f, 2.0f};
         float _phi = (m_params.end - m_params.start) * 10 / calib_scale[m_rbModel->GetSelection()];
         float _ksi;

@@ -50,9 +50,11 @@ struct Calib_Params
     // Scale the calibration model to the nozzle diameter and set the layer height accordingly (temp tower / VFA).
     // When false the 0.4 mm / 0.2 mm reference model is printed as-is.
     bool nozzle_based_resize = true;
-
-    bool print_ruler, use_zhop, interlaced;
-    int model_variant;
+    // Additional variables. They can be a common.
+    bool print_ruler  = true;
+    bool use_zhop     = false;
+    bool interlaced   = false;
+    int model_variant = 0;
     CalibMode mode;
 };
 
