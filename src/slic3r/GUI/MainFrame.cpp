@@ -3363,7 +3363,7 @@ void MainFrame::init_menubar_as_editor()
         [this]() {return m_plater->is_view3D_shown();; }, this);
 
     // Progressive Flow Ratio Calibration Test (Dialog)
-    append_menu_item(flow_ratio_menu, wxID_ANY, _L("Progressive Flow Ratio Calibration Test"), _L("Progressive Flow Ratio Calibration Test"),
+    append_menu_item(flow_ratio_menu, wxID_ANY, _L("Progressive test"), _L("Progressive Flow Ratio Calibration Test"),
         [this](wxCommandEvent&) { if (!m_progressive_flow_ratio_calib_dlg)
             m_progressive_flow_ratio_calib_dlg = new Progressive_Flow_Ratio_Test_Dlg((wxWindow*)this, wxID_ANY, m_plater);
             m_progressive_flow_ratio_calib_dlg->ShowModal();}, "", nullptr, [this]() {return m_plater->is_view3D_shown();; }, this);
@@ -3511,7 +3511,7 @@ void MainFrame::init_menubar_as_editor()
         [this]() {return m_plater->is_view3D_shown();; }, this);
 
     // Progressive Flow Ratio Calibration Test (Dialog)
-    append_menu_item(flow_ratio_menu, wxID_ANY, _L("Progressive Flow Ratio Calibration Test"), _L("Progressive Flow Ratio Calibration Test"),
+    append_menu_item(flow_ratio_menu, wxID_ANY, _L("Progressive test"), _L("Progressive Flow Ratio Calibration Test"),
         [this](wxCommandEvent&) { if (!m_progressive_flow_ratio_calib_dlg)
             m_progressive_flow_ratio_calib_dlg = new Progressive_Flow_Ratio_Test_Dlg((wxWindow*)this, wxID_ANY, m_plater);
             m_progressive_flow_ratio_calib_dlg->ShowModal();}, "", nullptr, [this]() {return m_plater->is_view3D_shown();; }, this);
