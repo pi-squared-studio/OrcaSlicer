@@ -164,29 +164,26 @@ void Fill::fill_surface_extrusion(const Surface* surface, const FillParams& para
         // Only concentric fills are not sorted.
         eec->no_sort = this->no_sort();
 
+        // ORCA: special flag for flow rate calibration
+        bool is_flow_calib = false;
+        // Orca: a forced surface fill order must survive the G-code path planner, which would
+        // otherwise re-chain and possibly reverse the paths. The same applies to the flow rate
+        // calibration's special toolpath order.
+        const bool keep_fill_order = params.fill_order != SurfaceFillOrder::Default;
+
         // Calibration section (pre-extrusion)
         if (this->calib_params != nullptr) {
             switch (this->calib_params->mode) {
             case CalibMode::Calib_Flow_Rate:
-                if (params.extrusion_role == erTopSolidInfill)
+                if (params.extrusion_role == erTopSolidInfill || keep_fill_order) {
+                    is_flow_calib = true;
                     eec->no_sort = true;
+                }
                 break;
             case CalibMode::Calib_Progressive_Flowratio:
                 if (layer_id > 3)
                     eec->no_sort = true;
             }
-        }
-        // ORCA: special flag for flow rate calibration
-        auto is_flow_calib = params.extrusion_role == erTopSolidInfill && this->calib_params != nullptr &&
-                             this->calib_params->mode == CalibMode::Calib_Flow_Rate;
-        
-        // Orca: a forced surface fill order must survive the G-code path planner, which would
-        // otherwise re-chain and possibly reverse the paths. The same applies to the flow rate
-        // calibration's special toolpath order.
-        const bool keep_fill_order = params.fill_order != SurfaceFillOrder::Default;
-        if (is_flow_calib || keep_fill_order) {
-            eec->no_sort = true;
-
         }
 
         // Extrusion section
