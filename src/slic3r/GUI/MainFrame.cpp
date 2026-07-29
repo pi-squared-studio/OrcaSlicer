@@ -3331,15 +3331,6 @@ void MainFrame::init_menubar_as_editor()
         }, "", nullptr,
         [this]() {return m_plater->is_view3D_shown();; }, this);
 
-    // Max Volumetric Speed
-    append_menu_item(m_topbar->GetCalibMenu(), wxID_ANY, _L("Max flowrate"), _L("Max flowrate"),
-        [this](wxCommandEvent&) {
-            if (!m_vol_test_dlg)
-                m_vol_test_dlg = new MaxVolumetricSpeed_Test_Dlg((wxWindow*)this, wxID_ANY, m_plater);
-            m_vol_test_dlg->ShowModal();
-        }, "", nullptr,
-        [this]() {return m_plater->is_view3D_shown();; }, this);
-
     // Pressure Advance
     append_menu_item(m_topbar->GetCalibMenu(), wxID_ANY, _L("Pressure advance"), _L("Pressure advance"),
         [this](wxCommandEvent&) {
@@ -3349,8 +3340,20 @@ void MainFrame::init_menubar_as_editor()
         }, "", nullptr,
         [this]() {return m_plater->is_view3D_shown();; }, this);
 
+    // Flowrate (with submenu)
+    auto flow_ratio_menu = new wxMenu();
+
+    // Max Volumetric Speed
+    append_menu_item(flow_ratio_menu, wxID_ANY, _L("Max flowrate"), _L("Max flowrate"),
+        [this](wxCommandEvent&) {
+            if (!m_vol_test_dlg)
+                m_vol_test_dlg = new MaxVolumetricSpeed_Test_Dlg((wxWindow*)this, wxID_ANY, m_plater);
+            m_vol_test_dlg->ShowModal();
+        }, "", nullptr,
+        [this]() {return m_plater->is_view3D_shown();; }, this);
+
     // Flow rate (Wizard Dialog)
-    append_menu_item(m_topbar->GetCalibMenu(), wxID_ANY, _L("Flow ratio"), _L("Flow Rate Calibration"),
+    append_menu_item(flow_ratio_menu, wxID_ANY, _L("Flow ratio wizard"), _L("Flow Rate Calibration"),
         [this](wxCommandEvent&) {
             if (!m_plater) return;
             if (!m_flow_rate_calib_dlg)
@@ -3359,11 +3362,12 @@ void MainFrame::init_menubar_as_editor()
         }, "", nullptr,
         [this]() {return m_plater->is_view3D_shown();; }, this);
 
-    // Practical Flow ratio Test (Dialog)
-    append_menu_item(m_topbar->GetCalibMenu(), wxID_ANY, _L("Practical Flow Ratio Test"), _L("Practical Flow Ratio calibration test"),
-        [this](wxCommandEvent&) { if (!m_practical_flow_ratio_calib_dlg)
-            m_practical_flow_ratio_calib_dlg = new Practical_Flow_Ratio_Test_Dlg((wxWindow*)this, wxID_ANY, m_plater);
-            m_practical_flow_ratio_calib_dlg->ShowModal();}, "", nullptr, [this]() {return m_plater->is_view3D_shown();; }, this);
+    // Progressive Flow Ratio Calibration Test (Dialog)
+    append_menu_item(flow_ratio_menu, wxID_ANY, _L("Progressive Flow Ratio Calibration Test"), _L("Progressive Flow Ratio Calibration Test"),
+        [this](wxCommandEvent&) { if (!m_progressive_flow_ratio_calib_dlg)
+            m_progressive_flow_ratio_calib_dlg = new Progressive_Flow_Ratio_Test_Dlg((wxWindow*)this, wxID_ANY, m_plater);
+            m_progressive_flow_ratio_calib_dlg->ShowModal();}, "", nullptr, [this]() {return m_plater->is_view3D_shown();; }, this);
+    m_topbar->GetCalibMenu()->AppendSubMenu(flow_ratio_menu, _L("Flow ratio"));
 
     // Retraction
     append_menu_item(m_topbar->GetCalibMenu(), wxID_ANY, _L("Retraction"), _L("Retraction"),
@@ -3475,15 +3479,6 @@ void MainFrame::init_menubar_as_editor()
         }, "", nullptr,
         [this]() {return m_plater->is_view3D_shown();; }, this);
 
-    // Max Volumetric Speed
-    append_menu_item(calib_menu, wxID_ANY, _L("Max flowrate"), _L("Max flowrate"),
-        [this](wxCommandEvent&) {
-            if (!m_vol_test_dlg)
-                m_vol_test_dlg = new MaxVolumetricSpeed_Test_Dlg((wxWindow*)this, wxID_ANY, m_plater);
-            m_vol_test_dlg->ShowModal();
-        }, "", nullptr,
-        [this]() {return m_plater->is_view3D_shown();; }, this);
-
     // Pressure Advance
     append_menu_item(calib_menu, wxID_ANY, _L("Pressure advance"), _L("Pressure advance"),
         [this](wxCommandEvent&) {
@@ -3494,8 +3489,19 @@ void MainFrame::init_menubar_as_editor()
         [this]() {return m_plater->is_view3D_shown();; }, this);
 
     // Flowrate (with submenu)
+    auto flow_ratio_menu = new wxMenu();
+
+    // Max Volumetric Speed
+    append_menu_item(flow_ratio_menu, wxID_ANY, _L("Max flowrate"), _L("Max flowrate"),
+        [this](wxCommandEvent&) {
+            if (!m_vol_test_dlg)
+                m_vol_test_dlg = new MaxVolumetricSpeed_Test_Dlg((wxWindow*)this, wxID_ANY, m_plater);
+            m_vol_test_dlg->ShowModal();
+        }, "", nullptr,
+        [this]() {return m_plater->is_view3D_shown();; }, this);
+
     // ORCA: Flow rate (Wizard Dialog)
-    append_menu_item(calib_menu, wxID_ANY, _L("Flow ratio"), _L("Flow Rate Calibration"),
+    append_menu_item(flow_ratio_menu, wxID_ANY, _L("Flow ratio"), _L("Flow Rate Calibration"),
         [this](wxCommandEvent&) {
             if (!m_plater) return;
             if (!m_flow_rate_calib_dlg)
@@ -3503,6 +3509,14 @@ void MainFrame::init_menubar_as_editor()
             m_flow_rate_calib_dlg->ShowModal();
         }, "", nullptr,
         [this]() {return m_plater->is_view3D_shown();; }, this);
+
+    // Progressive Flow Ratio Calibration Test (Dialog)
+    append_menu_item(flow_ratio_menu, wxID_ANY, _L("Progressive Flow Ratio Calibration Test"), _L("Progressive Flow Ratio Calibration Test"),
+        [this](wxCommandEvent&) { if (!m_progressive_flow_ratio_calib_dlg)
+            m_progressive_flow_ratio_calib_dlg = new Progressive_Flow_Ratio_Test_Dlg((wxWindow*)this, wxID_ANY, m_plater);
+            m_progressive_flow_ratio_calib_dlg->ShowModal();}, "", nullptr, [this]() {return m_plater->is_view3D_shown();; }, this);
+    
+    calib_menu->AppendSubMenu(flow_ratio_menu, _L("Flow ratio"));
 
     // Retraction
     append_menu_item(calib_menu, wxID_ANY, _L("Retraction"), _L("Retraction"),

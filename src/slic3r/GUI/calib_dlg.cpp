@@ -1619,14 +1619,14 @@ void Cornering_Test_Dlg::on_dpi_changed(const wxRect& suggested_rect) {
     Fit();
 }
 
-// Practical_Flow_Ratio_Test_Dlg
-Practical_Flow_Ratio_Test_Dlg::Practical_Flow_Ratio_Test_Dlg(wxWindow* parent, wxWindowID id, Plater* plater)
-    : DPIDialog(parent, id, _L("Practical flow ratio calibration test"), wxDefaultPosition, parent->FromDIP(wxSize(-1, 280)), wxDEFAULT_DIALOG_STYLE)
+// Progressive_Flow_Ratio_Test_Dlg
+Progressive_Flow_Ratio_Test_Dlg::Progressive_Flow_Ratio_Test_Dlg(wxWindow* parent, wxWindowID id, Plater* plater)
+    : DPIDialog(parent, id, _L("Progressive Flow Ratio Calibration Test"), wxDefaultPosition, parent->FromDIP(wxSize(-1, 280)), wxDEFAULT_DIALOG_STYLE)
     , m_plater(plater) {
     SetBackgroundColour(*wxWHITE); // make sure background color set for dialog
     SetForegroundColour(wxColour("#363636"));
     SetFont(Label::Body_14); 
-    Bind(wxEVT_SHOW, &Practical_Flow_Ratio_Test_Dlg::on_show, this);
+    Bind(wxEVT_SHOW, &Progressive_Flow_Ratio_Test_Dlg::on_show, this);
 
     wxBoxSizer* v_sizer = new wxBoxSizer(wxVERTICAL);
     SetSizer(v_sizer);
@@ -1653,7 +1653,7 @@ Practical_Flow_Ratio_Test_Dlg::Practical_Flow_Ratio_Test_Dlg(wxWindow* parent, w
     auto model_box         = new wxStaticBoxSizer(labeled_box_model, wxHORIZONTAL);
     m_rbModel = new RadioGroup(this, {_L("100 mm"), _L("150 mm"), _L("200 mm")}, wxHORIZONTAL);
     for (auto &_el : m_rbModel->GetChildren()) // sets the note of range unit converting into flow ratio
-        _el->Bind(wxEVT_MOTION, &Practical_Flow_Ratio_Test_Dlg::on_changed2, this);
+        _el->Bind(wxEVT_MOTION, &Progressive_Flow_Ratio_Test_Dlg::on_changed2, this);
     model_box->Add(m_rbModel, 0, wxALL | wxEXPAND, FromDIP(4));
     v_sizer->Add(model_box, 0, wxTOP | wxRIGHT | wxLEFT | wxEXPAND, FromDIP(10));
 
@@ -1674,7 +1674,7 @@ Practical_Flow_Ratio_Test_Dlg::Practical_Flow_Ratio_Test_Dlg(wxWindow* parent, w
     auto start_fr_text = new wxStaticText(this, wxID_ANY, start_fr_str, wxDefaultPosition, st_size, wxALIGN_LEFT);
     m_tiJDStart        = new TextInput(this, wxString::Format("%.2f", 0.9), "", "", wxDefaultPosition, ti_size);
     m_tiJDStart->GetTextCtrl()->SetValidator(wxTextValidator(wxFILTER_NUMERIC));
-    m_tiJDStart->Bind(wxEVT_TEXT, &Practical_Flow_Ratio_Test_Dlg::on_changed, this);
+    m_tiJDStart->Bind(wxEVT_TEXT, &Progressive_Flow_Ratio_Test_Dlg::on_changed, this);
     fr_sizer->Add(start_fr_text, 0, wxALL | wxALIGN_CENTER_VERTICAL, FromDIP(2));
     fr_sizer->Add(m_tiJDStart, 0, wxALL | wxALIGN_CENTER_VERTICAL, FromDIP(2));
     conditions_sizer->Add(fr_sizer, 0, wxLEFT, FromDIP(3));
@@ -1683,7 +1683,7 @@ Practical_Flow_Ratio_Test_Dlg::Practical_Flow_Ratio_Test_Dlg(wxWindow* parent, w
     fr_sizer = new wxBoxSizer(wxHORIZONTAL);
     auto end_fr_text  = new wxStaticText(this, wxID_ANY, end_fr_str, wxDefaultPosition, st_size, wxALIGN_LEFT);
     m_tiJDEnd         = new TextInput(this, wxString::Format("%.2f", 1.1), "", "", wxDefaultPosition, ti_size);
-    m_tiJDEnd->Bind(wxEVT_TEXT, &Practical_Flow_Ratio_Test_Dlg::on_changed, this);
+    m_tiJDEnd->Bind(wxEVT_TEXT, &Progressive_Flow_Ratio_Test_Dlg::on_changed, this);
     m_tiJDEnd->GetTextCtrl()->SetValidator(wxTextValidator(wxFILTER_NUMERIC));
     fr_sizer->Add(end_fr_text, 0, wxALL | wxALIGN_CENTER_VERTICAL, FromDIP(2));
     fr_sizer->Add(m_tiJDEnd, 0, wxALL | wxALIGN_CENTER_VERTICAL, FromDIP(2));
@@ -1762,8 +1762,8 @@ Practical_Flow_Ratio_Test_Dlg::Practical_Flow_Ratio_Test_Dlg(wxWindow* parent, w
     auto dlg_btn  = new DialogButtons(this, {"OK", _L("Autoslice")});
     v_sizer->Add(dlg_btn, 0, wxEXPAND);
 
-    dlg_btn->GetOK()->Bind(wxEVT_BUTTON, &Practical_Flow_Ratio_Test_Dlg::on_start, this);
-    dlg_btn->GetButtonFromIndex(1)->Bind(wxEVT_BUTTON, &Practical_Flow_Ratio_Test_Dlg::on_autoslice, this);
+    dlg_btn->GetOK()->Bind(wxEVT_BUTTON, &Progressive_Flow_Ratio_Test_Dlg::on_start, this);
+    dlg_btn->GetButtonFromIndex(1)->Bind(wxEVT_BUTTON, &Progressive_Flow_Ratio_Test_Dlg::on_autoslice, this);
 
     wxGetApp().UpdateDlgDarkUI(this);
 
@@ -1771,11 +1771,11 @@ Practical_Flow_Ratio_Test_Dlg::Practical_Flow_Ratio_Test_Dlg(wxWindow* parent, w
     Fit();
 }
 
-Practical_Flow_Ratio_Test_Dlg::~Practical_Flow_Ratio_Test_Dlg() {
+Progressive_Flow_Ratio_Test_Dlg::~Progressive_Flow_Ratio_Test_Dlg() {
     // Disconnect Events
 }
 
-wxString Practical_Flow_Ratio_Test_Dlg::get_status()
+wxString Progressive_Flow_Ratio_Test_Dlg::get_status()
 {
     auto filament_config = &wxGetApp().preset_bundle->filaments.get_edited_preset().config;
     wxString addtext     = "\n" + wxString::Format("%s %s filament: fr=%.3f", filament_config->get_filament_vendor(),
@@ -1805,7 +1805,7 @@ wxString Practical_Flow_Ratio_Test_Dlg::get_status()
     }
 }
 
-void Practical_Flow_Ratio_Test_Dlg::on_start(wxCommandEvent& event)
+void Progressive_Flow_Ratio_Test_Dlg::on_start(wxCommandEvent& event)
 {
     bool read_double = false;
     read_double      = m_tiJDStart->GetTextCtrl()->GetValue().ToDouble(&m_params.start);
@@ -1826,7 +1826,7 @@ void Practical_Flow_Ratio_Test_Dlg::on_start(wxCommandEvent& event)
         msg_dlg.ShowModal();
     }
 
-    m_params.mode = CalibMode::Calib_Practical_Flowratio;
+    m_params.mode = CalibMode::Calib_Progressive_Flowratio;
 
     // Set model type based on selection
     m_params.test_model    = m_rbModel->GetSelection();
@@ -1839,36 +1839,36 @@ void Practical_Flow_Ratio_Test_Dlg::on_start(wxCommandEvent& event)
     m_tiSpeed->GetTextCtrl()->GetValue().ToDouble(&_speed);
     m_params.speeds.clear();
     m_params.speeds.push_back(_speed);
-    m_plater->calib_practical_flowratio(m_params);
+    m_plater->calib_progressive_flowratio(m_params);
     EndModal(wxID_OK);
 }
 
-void Practical_Flow_Ratio_Test_Dlg::on_autoslice(wxCommandEvent& event) 
+void Progressive_Flow_Ratio_Test_Dlg::on_autoslice(wxCommandEvent& event) 
 { 
-    Practical_Flow_Ratio_Test_Dlg::on_start(event);
+    Progressive_Flow_Ratio_Test_Dlg::on_start(event);
     m_plater->reslice();
     m_plater->select_view_3D("Preview");
     wxGetApp().mainframe->select_tab(MainFrame::tpPreview);
 }
 
-void Practical_Flow_Ratio_Test_Dlg::on_changed(wxCommandEvent& event)
+void Progressive_Flow_Ratio_Test_Dlg::on_changed(wxCommandEvent& event)
 {
     m_stNote->SetLabel(get_status());
     event.Skip();
 }
 
-void Practical_Flow_Ratio_Test_Dlg::on_changed2(wxMouseEvent& event)
+void Progressive_Flow_Ratio_Test_Dlg::on_changed2(wxMouseEvent& event)
 {
     m_stNote->SetLabel(get_status());
     event.Skip();
 }
 
-void Practical_Flow_Ratio_Test_Dlg::on_dpi_changed(const wxRect& suggested_rect)
+void Progressive_Flow_Ratio_Test_Dlg::on_dpi_changed(const wxRect& suggested_rect)
 {
     this->Refresh();
     Fit();
 }
-void Practical_Flow_Ratio_Test_Dlg::on_show(wxShowEvent& event) { m_stNote->SetLabel(get_status()); }
+void Progressive_Flow_Ratio_Test_Dlg::on_show(wxShowEvent& event) { m_stNote->SetLabel(get_status()); }
 
 FlowRateCalibrationDialog::~FlowRateCalibrationDialog()
 {

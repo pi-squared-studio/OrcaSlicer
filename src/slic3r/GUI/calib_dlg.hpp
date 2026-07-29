@@ -184,11 +184,11 @@ protected:
     Plater* m_plater;
 };
 
-class Practical_Flow_Ratio_Test_Dlg : public DPIDialog
+class Progressive_Flow_Ratio_Test_Dlg : public DPIDialog
 {
 public:
-    Practical_Flow_Ratio_Test_Dlg(wxWindow* parent, wxWindowID id, Plater* plater);
-    ~Practical_Flow_Ratio_Test_Dlg();
+    Progressive_Flow_Ratio_Test_Dlg(wxWindow* parent, wxWindowID id, Plater* plater);
+    ~Progressive_Flow_Ratio_Test_Dlg();
     void on_dpi_changed(const wxRect& suggested_rect) override;
     wxString get_status();
 

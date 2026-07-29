@@ -171,7 +171,7 @@ void Fill::fill_surface_extrusion(const Surface* surface, const FillParams& para
                 if (params.extrusion_role == erTopSolidInfill)
                     eec->no_sort = true;
                 break;
-            case CalibMode::Calib_Practical_Flowratio:
+            case CalibMode::Calib_Progressive_Flowratio:
                 if (layer_id > 3)
                     eec->no_sort = true;
             }
@@ -216,7 +216,7 @@ void Fill::fill_surface_extrusion(const Surface* surface, const FillParams& para
                     eec->entities[i]->set_reverse();
                 }
                 break;
-            case CalibMode::Calib_Practical_Flowratio:
+            case CalibMode::Calib_Progressive_Flowratio:
                 const BoundingBox _bbox      = this->bounding_box;
                 const coord_t     _width     = _bbox.size().x();
                 const coord_t     _semiwidth = _width / 2;

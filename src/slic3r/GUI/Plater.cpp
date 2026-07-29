@@ -14044,9 +14044,9 @@ void Plater::_calib_pa_select_added_objects() {
     }
 }
 
-// Adjust settings for Practical Flow ratio calibration
-void Plater::calib_practical_flowratio(const Calib_Params& params) {
-    wxString calib_name = L"Practical Flow Ratio Test";
+// Adjust settings for Progressive Flow Ratio Calibration Test
+void Plater::calib_progressive_flowratio(const Calib_Params& params) {
+    wxString calib_name = L"Progressive Flow Ratio Calibration Test";
     if (new_project(false, false, calib_name) == wxID_CANCEL)
         return;
     wxGetApp().mainframe->select_tab(size_t(MainFrame::tp3DEditor));
