@@ -1612,11 +1612,6 @@ void PreferencesDialog::create_items()
     auto item_default_page     = create_item_combobox(_L("Default page"), _L("Set the page opened on startup."), "default_page", DefaultPage);
     g_sizer->Add(item_default_page);
 
-#ifdef _WIN32
-    auto item_darkmode         = create_item_darkmode(_L("Enable dark Mode"), "", "dark_color_mode");
-    g_sizer->Add(item_darkmode);
-#endif
-
     auto item_single_instance  = create_item_checkbox(_L("Allow only one OrcaSlicer instance"),
     #if __APPLE__
             _L("On OSX there is always only one instance of app running by default. However it is allowed to run multiple instances "
@@ -1815,15 +1810,26 @@ void PreferencesDialog::create_items()
     sizer_page->Add(g_sizer, 0, wxEXPAND);
 
     //////////////////////////
-    //// GRAPHICS TAB
+    //// INTERFACE TAB
     /////////////////////////////////////
-    m_pref_tabs->AppendItem(_L("Graphics"));
+    m_pref_tabs->AppendItem(_L("Interface"));
     f_sizers.push_back(new wxFlexGridSizer(1, 1, v_gap, 0));
     g_sizer = f_sizers.back();
     g_sizer->AddGrowableCol(0, 1);
 
-    //// GRAPHICS > General
-    g_sizer->Add(create_item_title(_L("General")), 1, wxEXPAND);
+    //// INTERFACE > User Environment
+    g_sizer->Add(create_item_title(_L("User Environment")), 1, wxEXPAND);
+
+#ifdef _WIN32
+    auto item_darkmode = create_item_darkmode(_L("Enable dark Mode"), "", "dark_color_mode");
+    g_sizer->Add(item_darkmode);
+#endif
+
+    auto item_showguide = create_item_checkbox(_L("Show internal Guide Tab"), "", "show_guide_tab", _L("(Requires restart)"));
+    g_sizer->Add(item_showguide);
+
+    //// INTERFACE > Graphics
+    g_sizer->Add(create_item_title(_L("Graphics")), 1, wxEXPAND);
 
     auto smooth_normals = create_item_checkbox(
         _L("Smooth normals"),
@@ -1833,7 +1839,7 @@ void PreferencesDialog::create_items()
     );
     g_sizer->Add(smooth_normals);
 
-    //// GRAPHICS > Realistic view
+    //// INTERFACE > Realistic view
     g_sizer->Add(create_item_title(_L("Realistic View")), 1, wxEXPAND);
 
     auto item_realistic_phong = create_item_checkbox(
@@ -1857,7 +1863,7 @@ void PreferencesDialog::create_items()
     );
     g_sizer->Add(item_realistic_shadows);
 
-    //// GRAPHICS > Anti-aliasing
+    //// INTERFACE > Anti-aliasing
     g_sizer->Add(create_item_title(_L("Anti-aliasing")), 1, wxEXPAND);
 
     auto item_antialiasing = create_item_combobox(
@@ -1882,7 +1888,7 @@ void PreferencesDialog::create_items()
     );
     g_sizer->Add(item_fxaa);
 
-    //// GRAPHICS > FPS
+    //// INTERFACE > FPS
     g_sizer->Add(create_item_title(_L("FPS")), 1, wxEXPAND);
 
     auto item_fps_cap = create_item_spinctrl(

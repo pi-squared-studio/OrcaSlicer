@@ -226,6 +226,7 @@ public:
         tpCalibration   = 6,
         tpAuxiliary     = 7,
         toDebugTool     = 8,
+        tpGuide         = 9,
     };
 
     //BBS: add slice&&print status update logic
@@ -357,6 +358,8 @@ public:
     void        refresh_plugin_tips();
     void RunScript(wxString js);
 
+    void guide_url(wxString url);
+
     //SoftFever
     void show_device(bool bBBLPrinter);
     void fit_tab_labels(); // ORCA
@@ -378,6 +381,8 @@ public:
     //BBS: GUI refactor
     MonitorPanel*         m_monitor{ nullptr };
 
+    WebViewPanel*         m_guide{nullptr};
+
     //AuxiliaryPanel*       m_auxiliary{ nullptr };
     MultiMachinePage*     m_multi_machine{ nullptr };
     ProjectPanel*         m_project{ nullptr };
@@ -392,6 +397,7 @@ public:
     wxBoxSizer*           m_side_tools{ nullptr };
     ParamsPanel*          m_param_panel{ nullptr };
     ParamsDialog*         m_param_dialog{ nullptr };
+    Notebook*             m_guidepanel{nullptr};
     //BBS
     SettingsDialog        m_settings_dialog;
     DiffPresetDialog      diff_dialog;

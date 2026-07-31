@@ -395,6 +395,8 @@ public:
 
     wxString get_inf_dialog_contect () {return m_info_dialog_content;};
 
+    bool has_guide() const { return app_config->get_bool("show_guide_tab"); };
+        
     std::vector<std::string> split_str(std::string src, std::string separator);
     // To be called after the GUI is fully built up.
     // Process command line parameters cached in this->init_params,
@@ -699,6 +701,7 @@ public:
 	PresetUpdater*  get_preset_updater() { return preset_updater; }
 
     Notebook*       tab_panel() const ;
+    WebViewPanel*   guide_tab() const;
     int             extruders_cnt() const;
     int             extruders_edited_cnt() const;
 

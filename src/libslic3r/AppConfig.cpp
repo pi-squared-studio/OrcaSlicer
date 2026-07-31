@@ -344,6 +344,9 @@ void AppConfig::set_defaults()
         set("sys_menu_enabled", "1");
 //#endif
 #endif // _WIN32
+ 
+    if (get("show_guide_tab").empty())
+        set("show_guide_tab", "0");
 
     // BBS
     /*if (get("3mf_include_gcode").empty())

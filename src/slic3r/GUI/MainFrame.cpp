@@ -100,6 +100,8 @@ wxDEFINE_EVENT(EVT_BACKUP_POST, wxCommandEvent);
 wxDEFINE_EVENT(EVT_LOAD_URL, wxCommandEvent);
 wxDEFINE_EVENT(EVT_LOAD_PRINTER_URL, LoadPrinterViewEvent);
 
+wxDEFINE_EVENT(EVT_GUIDE_URL, wxCommandEvent);
+
 enum class ERescaleTarget
 {
     Mainframe,
@@ -1365,7 +1367,19 @@ void MainFrame::init_tabpanel() {
             m_plater->on_filament_count_change(full_config.option<ConfigOptionStrings>("filament_colour")->values.size());
         }
     }
-}
+
+    if (wxGetApp().has_guide()) {
+        m_guide = new WebViewPanel(m_tabpanel);
+        m_guide->SetBackgroundColour(*wxWHITE);
+        m_guide->send_url(wxString("https://www.orcaslicer.com/wiki"));
+        m_tabpanel->AddPage(m_guide, _L("Guide"), std::string("tab_guide_active"), std::string("tab_guide_active"), false);
+        Bind(EVT_GUIDE_URL, [this](wxCommandEvent& evt) {
+            wxString url = evt.GetString();
+            m_guide->send_url(url);
+            select_tab(m_guide);
+        });
+    }
+}   
 
 // SoftFever
 void MainFrame::show_device(bool bBBLPrinter) {
@@ -4237,6 +4251,14 @@ void MainFrame::load_url(wxString url)
 {
     BOOST_LOG_TRIVIAL(trace) << "load_url:" << url;
     auto evt = new wxCommandEvent(EVT_LOAD_URL, this->GetId());
+    evt->SetString(url);
+    wxQueueEvent(this, evt);
+}
+
+void MainFrame::guide_url(wxString url)
+{
+    BOOST_LOG_TRIVIAL(trace) << "load_url:" << url;
+    auto evt = new wxCommandEvent(EVT_GUIDE_URL, this->GetId());
     evt->SetString(url);
     wxQueueEvent(this, evt);
 }

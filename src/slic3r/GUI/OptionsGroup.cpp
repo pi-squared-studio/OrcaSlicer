@@ -1328,7 +1328,11 @@ wxString OptionsGroup::get_url(const std::string& path_end)
     return wxString::Format(L"https://www.orcaslicer.com/wiki/%s", from_u8(path_end));
 }
 
-bool OptionsGroup::launch_browser(const std::string& path_end) { return wxLaunchDefaultBrowser(OptionsGroup::get_url(path_end)); }
+bool OptionsGroup::launch_browser(const std::string& path_end) 
+{ 
+    if (wxGetApp().has_guide()) {
+        wxGetApp().mainframe->guide_url(url);
+}
 
 //-------------------------------------------------------------------------------------------
 // ogStaticText
