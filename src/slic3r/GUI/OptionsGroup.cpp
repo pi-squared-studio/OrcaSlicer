@@ -1331,7 +1331,11 @@ wxString OptionsGroup::get_url(const std::string& path_end)
 bool OptionsGroup::launch_browser(const std::string& path_end) 
 { 
     if (wxGetApp().has_guide()) {
+        wxString url = OptionsGroup::get_url(path_end);
         wxGetApp().mainframe->guide_url(url);
+        return true;
+    }
+    return wxLaunchDefaultBrowser(OptionsGroup::get_url(path_end)); 
 }
 
 //-------------------------------------------------------------------------------------------

@@ -1371,7 +1371,8 @@ void MainFrame::init_tabpanel() {
     if (wxGetApp().has_guide()) {
         m_guide = new WebViewPanel(m_tabpanel);
         m_guide->SetBackgroundColour(*wxWHITE);
-        m_guide->send_url(wxString("https://www.orcaslicer.com/wiki"));
+        wxString url = "https://www.orcaslicer.com/wiki";
+        m_guide->send_url(url);
         m_tabpanel->AddPage(m_guide, _L("Guide"), std::string("tab_guide_active"), std::string("tab_guide_active"), false);
         Bind(EVT_GUIDE_URL, [this](wxCommandEvent& evt) {
             wxString url = evt.GetString();
