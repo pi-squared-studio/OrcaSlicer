@@ -1633,7 +1633,7 @@ void PreferencesDialog::create_items()
     g_sizer->Add(item_default_page);
 
 #ifdef _WIN32
-    auto item_darkmode = create_item_darkmode(_L("Enable dark Mode"), "", "dark_color_mode");
+    auto item_darkmode         = create_item_darkmode(_L("Enable dark Mode"), "", "dark_color_mode");
     g_sizer->Add(item_darkmode);
 #endif
 
@@ -1843,7 +1843,7 @@ void PreferencesDialog::create_items()
     g_sizer->AddGrowableCol(0, 1);
 
     //// GRAPHICS > General
-    g_sizer->Add(create_item_title(_L("Graphics")), 1, wxEXPAND);
+    g_sizer->Add(create_item_title(_L("General")), 1, wxEXPAND);
 
     auto smooth_normals = create_item_checkbox(
         _L("Smooth normals"),
