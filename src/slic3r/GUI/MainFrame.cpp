@@ -1372,11 +1372,11 @@ void MainFrame::init_tabpanel() {
         m_guide = new WebViewPanel(m_tabpanel);
         m_guide->SetBackgroundColour(*wxWHITE);
         wxString url = "https://www.orcaslicer.com/wiki";
-        m_guide->send_url(url);
+        send_guide_url(url);
         m_tabpanel->AddPage(m_guide, _L("Guide"), std::string("tab_guide_active"), std::string("tab_guide_active"), false);
         Bind(EVT_GUIDE_URL, [this](wxCommandEvent& evt) {
             wxString url = evt.GetString();
-            m_guide->send_url(url);
+            send_guide_url(url);
             select_tab(m_guide);
         });
     }
@@ -2575,6 +2575,9 @@ static wxMenu* generate_help_menu()
 {
     wxMenu* helpMenu = new wxMenu();
 
+    // Orca Slicer Wiki
+    append_menu_item(helpMenu, wxID_ANY, _L("Orca Slicer Wiki"), wxGetApp().has_guide() ? _L("Orca Slicer Wiki") : _L("Online Wiki"),
+        [](wxCommandEvent&) { wxGetApp().orca_slicer_wiki(); });
     // shortcut key
     append_menu_item(helpMenu, wxID_ANY, _L("Keyboard Shortcuts") + sep + "&?", _L("Show the list of keyboard shortcuts"),
         [](wxCommandEvent&) { wxGetApp().keyboard_shortcuts(); });
@@ -4256,7 +4259,26 @@ void MainFrame::load_url(wxString url)
     wxQueueEvent(this, evt);
 }
 
-void MainFrame::guide_url(wxString url)
+void MainFrame::send_guide_url(wxString& url) // for non-navigation panel
+{
+    wxString url2          = url;
+    wxString language_code = Slic3r::GUI::wxGetApp().current_language_code().BeforeFirst('_');
+    language_code          = language_code.ToStdString();
+    if (language_code != "en") {
+        std::string provider(wxGetApp().app_config->get("translation_provider"));
+        if (provider == "google") {
+            url2 = wxString::Format("https://translate.google.com/website?sl=auto&tl=%s&hl=%s&client=webapp&u=%s", language_code,
+                                    language_code, url);
+        } else if (provider == "yandex") {
+            url2 = wxString::Format("https://translate.yandex.com/translate?lang=%s&url=%s", language_code, url);
+        }
+        // else if (provider == "microsoft")
+        //      url2 = wxString::Format("https://microsofttranslator.com/bv.aspx?from=&to=%s&a=%s", language_code, url);
+    }
+    m_guide->send_url(url2);
+};
+
+void MainFrame::load_guide_url(wxString url)
 {
     BOOST_LOG_TRIVIAL(trace) << "load_url:" << url;
     auto evt = new wxCommandEvent(EVT_GUIDE_URL, this->GetId());

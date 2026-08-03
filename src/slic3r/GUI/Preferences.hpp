@@ -73,6 +73,7 @@ public:
     ::CheckBox * m_bambu_cloud_checkbox      = {nullptr};
     ::TextInput *m_backup_interval_textinput = {nullptr};
     ::ComboBox * m_network_version_combo     = {nullptr};
+    ::ComboBox* m_translation_provider_combo = {nullptr};
     std::vector<NetworkLibraryVersionInfo> m_available_versions;
 
     wxString m_developer_mode_def;

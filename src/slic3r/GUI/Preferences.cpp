@@ -293,6 +293,9 @@ std::tuple<wxBoxSizer*, ComboBox*> PreferencesDialog::create_item_combobox_base(
 
     m_sizer->Add(combobox, 0, wxALIGN_CENTER);
 
+    if (param == "translation_provider")
+        m_translation_provider_combo = combobox;
+
     return {m_sizer, combobox};
 }
 
@@ -1059,6 +1062,9 @@ wxBoxSizer *PreferencesDialog::create_item_checkbox(wxString title, wxString too
                     canvas->request_extra_frame();
                 }
             }
+        } else if (param == "show_guide_tab") {
+            bool enabled = app_config->get_bool("show_guide_tab") && app_config->get("language").find("en") != 0;
+            if (m_translation_provider_combo) m_translation_provider_combo->Enable(enabled);
         }
 
 #ifdef __WXMSW__
@@ -1506,6 +1512,10 @@ void PreferencesDialog::create()
     m_sizer_body->Add(m_pref_tabs, 0, wxEXPAND | wxBOTTOM | wxTOP, FromDIP(5));
     m_sizer_body->Add(m_parent, 1, wxEXPAND);
 
+    // apply states
+    bool tp_enabled = app_config->get_bool("show_guide_tab") && app_config->get("language").find("en") != 0;
+    if (m_translation_provider_combo)   m_translation_provider_combo->Enable(tp_enabled);
+
     SetSizer(m_sizer_body);
     Layout();
     Fit();
@@ -1603,6 +1613,16 @@ void PreferencesDialog::create_items()
 
     auto item_language         = create_item_language_combobox(_L("Language"), "");
     g_sizer->Add(item_language);
+
+    auto item_showguide        = create_item_checkbox(_L("Show internal Guide Tab"), "", "show_guide_tab", _L("(Requires restart)"));
+    g_sizer->Add(item_showguide);
+
+    std::vector<wxString> guideTranslationProviderOptions     = {_L("None"), "Google", "Yandex"}; // _L("Microsoft"),
+    std::vector<string> guideTranslationProviderConfigOptions = {"none", "google", "yandex"};     // "microsoft",
+    auto item_translation_provider = create_item_combobox(_L("Guide Translation Provider"), _L("Choose Guide Translation Provider (Experemental)"),
+                                                          "translation_provider", guideTranslationProviderOptions,
+                                                          guideTranslationProviderConfigOptions);
+    g_sizer->Add(item_translation_provider);
 
     std::vector<wxString>Units = {_L("Metric") + " (mm, g)", _L("Imperial") + " (in, oz)"};
     auto item_currency         = create_item_combobox(_L("Units"), "", "use_inches", Units);
@@ -1824,9 +1844,6 @@ void PreferencesDialog::create_items()
     auto item_darkmode = create_item_darkmode(_L("Enable dark Mode"), "", "dark_color_mode");
     g_sizer->Add(item_darkmode);
 #endif
-
-    auto item_showguide = create_item_checkbox(_L("Show internal Guide Tab"), "", "show_guide_tab", _L("(Requires restart)"));
-    g_sizer->Add(item_showguide);
 
     //// INTERFACE > Graphics
     g_sizer->Add(create_item_title(_L("Graphics")), 1, wxEXPAND);

@@ -358,7 +358,9 @@ public:
     void        refresh_plugin_tips();
     void RunScript(wxString js);
 
-    void guide_url(wxString url);
+    void send_guide_url(wxString& url);
+
+    void load_guide_url(wxString url);
 
     //SoftFever
     void show_device(bool bBBLPrinter);
@@ -397,7 +399,6 @@ public:
     wxBoxSizer*           m_side_tools{ nullptr };
     ParamsPanel*          m_param_panel{ nullptr };
     ParamsDialog*         m_param_dialog{ nullptr };
-    Notebook*             m_guidepanel{nullptr};
     //BBS
     SettingsDialog        m_settings_dialog;
     DiffPresetDialog      diff_dialog;

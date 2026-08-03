@@ -474,6 +474,7 @@ public:
 
     void            recreate_GUI(const wxString& message);
     void            system_info();
+    void            orca_slicer_wiki();
     void            keyboard_shortcuts();
     void            troubleshoot();
     void            load_project(wxWindow *parent, wxString& input_file) const;
