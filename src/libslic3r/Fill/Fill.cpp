@@ -22,57 +22,55 @@
 
 namespace Slic3r {
 
-// Calculate infill rotation angle (in radians) for a given layer from a rotation template.
-// Grammar subset handled (rotation only):
-//   [±]α[*Z or !][joint][-][N|B|T][length][* or !]
-//   [±]α*                    sets an initial angle only (no layer processed)
-// Where:
-// - α: angle in degrees. Without a sign it's absolute; with +/− it's relative. α% means a percentage of 360°.
-// - Runtime: *Z repeats the instruction Z times; bare * is a no-op used for initialization; ! runs once globally and then stops.
-// - Solid signs (D,S,O,M,R) are not processed here; if present they are treated as invalid/non-rotation characters.
-// - Joint signs (shape of the turn across a range):
-//     / linear;
-//     N,n vertical sinus (n = lazy/half amplitude);
-//     Z,z horizontal sinus (z = lazy/half amplitude);
-//     $ arcsin; L quarter circle H→V; l quarter circle V→H;
-//     U,u squared; Q,q cubic; ~ random; ^ pseudorandom; | middle step; # vertical step at end.
-// - Counting / range length:
-//     After the joint (or after α) a count determines duration of the turn:
-//       N = layer count, B = bottom_shell_layers, T = top_shell_layers.
-//     Prefix '-' flips the joint (swap initial/final orientation).
-// - Length modifiers convert the count to a Z range instead of a pure layer count:
-//     mm, cm, m, ' (feet), " (inches), # (standard height of N layers), % (percent of model height).
-//
-// Behavior:
-// - The template string is tokenized by commas/whitespace and evaluated cyclically with one or more "ranges" per token.
-// - Absolute α resets the accumulated angle at the start of its range; relative α accumulates.
-// - *Z and ! control repetition and one-time execution of tokens across layers.
-// - If the template contains no metalanguage symbols, it is treated as a simple comma-separated list of angles repeated by modulo.
-// - Returns angle in radians for the requested layer_id. 0° aligns with +X; fillers may internally rotate as needed.
-double calculate_infill_rotation_angle(const PrintObject* object,
-                                       size_t             layer_id,
-                                       const double&      fixed_infill_angle,
-                                       const std::string& template_string)
+inline bool is_absolute(char* cs) 
 {
+    return cs[0] == '_' || ((cs[0] >= '0' && cs[0] <= '9') && !(cs[0] == '+' || cs[0] == '-'));
+};
+
+inline Vec2d rotate_point_CW(double cx, double cy, double angle, Vec2d p)
+{ 
+    const double cs = cos(angle);
+    const double sn = sin(angle);
+    const double x  = p.x() - cx;
+    const double y  = p.y() - cy;
+    return Vec2d(cs * x - sn * y + cx, sn * x + cs * y + cy);
+};
+
+inline Vec2d rotate_point_CW(double angle, Vec2d p)
+{ 
+    const double cs = cos(angle);
+    const double sn = sin(angle);
+    return Vec2d(cs * p.x() - sn * p.y(), sn * p.x() + cs * p.y());
+};
+
+// Calculate infill rotation angle (in radians) for a given layer from a rotation template.
+// Check the link for more info: https://www.orcaslicer.com/wiki/print_settings/strength/strength_settings_infill_rotation_template_metalanguage
+static std::pair<double, Point> calculate_infill_position(const PrintObject* object,
+                                                          size_t layer_id,
+                                                          const PrintRegionConfig& region_config,
+                                                          const double& fixed_infill_angle, // if template is used then it parameter must recieve model's direction
+                                                          const std::string& template_string)
+{
+    Vec2d shift = Vec2d(0., 0.);
     if (template_string.empty()) {
-        return Geometry::deg2rad(fixed_infill_angle);
+        return std::pair<double, Vec2d> (Geometry::deg2rad(fixed_infill_angle), shift);
     }
     // Convert the id to an index. Layer::id() counts the raft layers, object->layers() does not.
     const size_t first_object_layer_id = object->get_layer(0)->id();
-    layer_id = layer_id > first_object_layer_id ? layer_id - first_object_layer_id : 0;
-    double             angle = 0.0;
-    ConfigOptionFloats rotate_angles;
-    const std::string  search_string = "/NnZz$LlUuQq~^|#";
-    if (regex_search(template_string, std::regex("[+\\-%*@\'\"cm" + search_string + "]"))) { // template metalanguage of rotating infill
-        std::regex                 del("[\\s,]+");
-        std::sregex_token_iterator it(template_string.begin(), template_string.end(), del, -1);
-        std::vector<std::string>   tk;
+    layer_id                           = layer_id > first_object_layer_id ? layer_id - first_object_layer_id : 0;
+    double angle                       = 0.0;
+    const std::string search_string    = "^~/NnZz$LlUuQqVvDd"; // Attention: the first character in the string must be the ^ symbol, as it will later be escaped in the regex.
+    if (regex_search(template_string, std::regex("[+\\-%XYxy_*@\'\"cm\\" + search_string + "]"))) { // template metalanguage of rotating infill
+        std::string template_string2 = std::regex_replace(template_string, std::regex("(^|[^1-9])0+([xX])"), "$1$2");
+        std::regex del("[\\s,]+");
+        std::sregex_token_iterator it(template_string2.begin(), template_string2.end(), del, -1);
+        std::vector<std::string> tk;
         std::sregex_token_iterator end;
         while (it != end) {
             tk.push_back(*it++);
         }
-        int    t            = 0;
-        int    repeats      = 0;
+        int t               = 0;
+        int repeats         = 0;
         double angle_add    = 0;
         double angle_steps  = 1;
         double angle_start  = 0;
@@ -80,10 +78,12 @@ double calculate_infill_rotation_angle(const PrintObject* object,
         double start_fill_z = limit_fill_z;
         // The raft height, or 0 without a raft.
         const double print_z_offset = object->slicing_parameters().object_print_z_min;
-        bool   _noop        = false;
-        auto              fill_form = std::string::npos;
-        bool              _absolute = false;
-        bool              _negative = false;
+        bool _noop          = false;
+        auto fill_form      = std::string::npos;
+        bool _absolute      = false;
+        bool _negative      = false;
+        Vec2d shift_add     = Vec2d(0., 0.);
+        Vec2d shift_start   = Vec2d(0., 0.);
         std::vector<bool> stop(tk.size(), false);
 
         for (int i = 0; i <= layer_id; i++) {
@@ -103,34 +103,139 @@ double calculate_infill_rotation_angle(const PrintObject* object,
                     do {
                         if (!stop[t]) {
                             _noop     = false;
-                            _absolute = false;
                             _negative = false;
                             angle_start += angle_add;
-                            angle_add   = 0;
-                            angle_steps = 1;
-                            repeats     = 1;
+                            shift_start += shift_add;
+                            shift_add    = Vec2d(0., 0.);
+                            angle_steps  = 1;
+                            repeats      = 1;
                             if (tk[t].find('!') != std::string::npos) // this is an one-time instruction
                                 stop[t] = true;
 
                             char* cs = &tk[t][0];
 
-                            if ((cs[0] >= '0' && cs[0] <= '9') && !(cs[0] == '+' || cs[0] == '-')) // absolute/relative
-                                _absolute = true;
+                            //_absolute = ((cs[0] >= '0' && cs[0] <= '9') && !(cs[0] == '+' || cs[0] == '-')); // absolute/relative
+                            _absolute = is_absolute(cs); // absolute/relative
+                            if (cs[0] == '_') {          // negative shift
+                                cs++;
+                                angle_add = -strtod(cs, &cs); // read negative absolute angle parameter
+                            } else
+                                angle_add = strtod(cs, &cs); // read absolute angle parameter
 
-                            angle_add = strtod(cs, &cs); // read angle parameter
+                            if (!angle_add && (cs[0] == '+' || cs[0] == '-'))
+                                cs++;
 
                             if (cs[0] == '%') { // percentage of angles
                                 angle_add *= 3.6;
-                                cs = &cs[1];
+                                cs++;
+                            } else if (cs[0] == ':') { // fractional of full turn
+                                if (angle_add == 0.)
+                                    angle_add = 1.;
+                                cs++;
+                                double angle_frac = strtod(cs, &cs);
+                                if (angle_frac == 0.)
+                                    angle_frac = 1.;
+                                angle_add *= 360 / angle_frac;
                             }
+                            
+                            // shift section
+                            bool shift_reset = false;
+                            double shift_angle(0.);
+                            Vec2d shift_base(0., 0.);
+                            Vec2d shift_base2(0., 0.);
+                            Vec2d shift_vector(0., 0.);
+                            Vec2d shift_vector2(0., 0.);
+                            for (;;) {
+                                bool shift_absolute = false;
+                                char* shift_sign = cs;
+                                double shift_value(0.);
+                                if (!(cs[0] == 'X' || cs[0] == 'Y' || cs[0] == 'x' || cs[0] == 'y')) // get shift
+                                    break;
+                                cs++;
+                                if (shift_absolute = is_absolute(cs)) // absolute/relative
+                                    shift_reset = true;
+
+                                if (cs[0] == '_') { // get value
+                                    cs++;
+                                    shift_value = -strtod(cs, &cs);
+                                }
+                                shift_value = strtod(cs, &cs);
+
+                                if (cs[0] == '#') { // value in number of standard lines
+                                    shift_value *= object->config().line_width;
+                                    cs++;
+                                } else if (cs[0] == '@') { // value in number of standard lines counted with infill density
+                                    auto object_config = object->config();
+                                    shift_value *= object_config.line_width * region_config.fill_multiline / region_config.sparse_infill_density.get_abs_value(1);
+                                    cs++;
+                                } else if (cs[0] == '%') { // value in the percents of model height
+                                    shift_value *= object->height() * 1e-8;
+                                    cs++;
+                                } else if (cs[0] == '\'') { // value in the feet
+                                    shift_value *= 12 * 25.4;
+                                    cs++;
+                                } else if (cs[0] == '\"') {// value in the inches
+                                    shift_value *= 25.4;
+                                    cs++;
+                                } else if (cs[0] == 'c') { // value in centimeters
+                                    shift_value *= 10.;
+                                    cs++;
+                                    if (cs[0] == 'm')
+                                        cs++;
+                                } else if (cs[0] == 'm') {
+                                    if (cs[1] == 'm') // value in the millimeters
+                                        cs++;
+                                    else 
+                                        shift_value *= 1000.;
+                                }
+
+                                if (shift_sign[0] == 'X') { // get X shift
+                                    if (shift_absolute)
+                                        shift_base[0] += shift_value;
+                                    else
+                                        shift_vector[0] += shift_value;
+                                } else if (shift_sign[0] == 'Y') { // get Y shift
+                                    if (shift_absolute)
+                                        shift_base[1] += shift_value;
+                                    else
+                                        shift_vector[1] += shift_value;
+                                } else if (shift_sign[0] == 'x') { // get relative X shift
+                                    if (shift_absolute)
+                                        shift_base2[0] += shift_value;
+                                    else
+                                        shift_vector2[0] += shift_value;
+                                } else if (shift_sign[0] == 'y') { // get relative Y shift
+                                    if (shift_absolute)
+                                        shift_base2[1] += shift_value;
+                                    else
+                                        shift_vector2[1] += shift_value;
+                                }
+                            };
+                            double angle_complex(fixed_infill_angle + Geometry::deg2rad(angle_start));
+                            if (shift_reset)
+                                if (!shift_base.isZero())
+                                    if (!shift_base2.isZero())
+                                        shift_start = rotate_point_CW(fixed_infill_angle, shift_base) +
+                                                      rotate_point_CW(angle_complex, shift_base2);
+                                    else
+                                        shift_start = rotate_point_CW(fixed_infill_angle, shift_base);
+                                else if (!shift_base2.isZero()) 
+                                        shift_start = rotate_point_CW(angle_complex, shift_base2);
+
+                            if (!shift_vector.isZero())
+                                if (!shift_vector2.isZero())
+                                    shift_add = rotate_point_CW(fixed_infill_angle, shift_vector) + 
+                                                rotate_point_CW(angle_complex, shift_vector2);
+                                else
+                                    shift_add = rotate_point_CW(fixed_infill_angle, shift_vector);
+                            else if (!shift_vector2.isZero())
+                                shift_add = rotate_point_CW(angle_complex, shift_vector2);
 
                             int tit = tk[t].find('*');
                             if (tit != std::string::npos) // overall angle_cycles
                                 repeats = strtol(&tk[t][tit + 1], &cs, 0);
 
-                            if (repeats) {                                // run if overall cycles greater than 0
-                                // Solid signs (D,S,O,M,R) are not handled here; if present they behave as invalid characters.
-
+                            if (repeats) { // run if overall cycles greater than 0
                                 if (cs[0] == 'B') {
                                     angle_steps = object->print()->default_region_config().bottom_shell_layers.value;
                                 } else if (cs[0] == 'T') {
@@ -138,7 +243,7 @@ double calculate_infill_rotation_angle(const PrintObject* object,
                                 } else {
                                     fill_form = search_string.find(cs[0]);
                                     if (fill_form != std::string::npos)
-                                        cs = &cs[1];
+                                        cs++;
 
                                     _negative   = (cs[0] == '-'); // negative parameter
                                     angle_steps = abs(strtod(cs, &cs));
@@ -146,7 +251,15 @@ double calculate_infill_rotation_angle(const PrintObject* object,
                                     if (angle_steps && cs[0] != '\0' && cs[0] != '!') {
                                         if (cs[0] == '%') // value in the percents of fill_z
                                             limit_fill_z = angle_steps * object->height() * 1e-8;
-                                        else if (cs[0] == '#') // value in the feet
+                                        else if (cs[0] == ':') { // fractional of full height
+                                            if (angle_steps == 0.)
+                                                angle_steps = 1.;
+                                            cs++;
+                                            double angle_frac = strtod(cs, &cs);
+                                            if (angle_frac == 0.)
+                                                angle_frac = 1.;
+                                            limit_fill_z = angle_steps / angle_frac * object->height() * 1e-6;
+                                        } else if (cs[0] == '#') // value in the feet
                                             limit_fill_z = angle_steps * object->config().layer_height;
                                         else if (cs[0] == '\'') // value in the feet
                                             limit_fill_z = angle_steps * 12 * 25.4;
@@ -157,7 +270,7 @@ double calculate_infill_rotation_angle(const PrintObject* object,
                                         else if (cs[0] == 'm') {
                                             if (cs[1] == 'm') { // value in the millimeters
                                                 limit_fill_z = angle_steps * 1.;
-                                            } else{
+                                            } else {
                                                 limit_fill_z = angle_steps * 1000.;
                                             }
                                         }
@@ -166,19 +279,22 @@ double calculate_infill_rotation_angle(const PrintObject* object,
                                     }
                                 }
                                 if (angle_steps) { // if limit_fill_z does not setting by lenght method. Get count the layer id above model height
-                                    if (fill_form == std::string::npos && !_absolute)
+                                    if (fill_form == std::string::npos && !_absolute) {
                                         angle_add *= (int) angle_steps;
+                                        shift_add *= (int) angle_steps;
+                                    }
                                     int idx      = i + std::max(angle_steps - 1, 0.);
                                     int sdx      = std::max(0, idx - (int) object->layers().size());
                                     idx          = std::min(idx, (int) object->layers().size() - 1);
                                     limit_fill_z = object->get_layer(idx)->print_z + sdx * object->config().layer_height;
                                 }
                                 repeats = std::max(repeats - 1, 0);
-                            } else
+                            } else {
                                 _noop = true; // set the dumb cycle
+                            }
                             if (_absolute) {  // is absolute
-                                angle_start = angle_add;
-                                angle_add   = 0;
+                                angle_start    = angle_add;
+                                angle_add      = 0;
                             }
                         }
                         if (++t >= tk.size())
@@ -192,31 +308,44 @@ double calculate_infill_rotation_angle(const PrintObject* object,
             double negvalue = (_negative ? limit_fill_z - top_z : top_z - start_fill_z) / (limit_fill_z - start_fill_z);
 
             switch (fill_form) {
-            case 0: break;                                                  // /-joint, linear
-            case 1: negvalue -= sin(negvalue * PI * 2.) / (PI * 2.); break; // N-joint, sinus, vertical start
-            case 2: negvalue -= sin(negvalue * PI * 2.) / (PI * 4.); break; // n-joint, sinus, vertical start, lazy
-            case 3: negvalue += sin(negvalue * PI * 2.) / (PI * 2.); break; // Z-joint, sinus, horizontal start
-            case 4: negvalue += sin(negvalue * PI * 2.) / (PI * 4.); break; // z-joint, sinus, horizontal start, lazy
-            case 5: negvalue = asin(negvalue * 2. - 1.) / PI + 0.5; break;  // $-joint, arcsin
-            case 6: negvalue = sin(negvalue * PI / 2.); break;              // L-joint, quarter of circle, horizontal start
-            case 7: negvalue = 1. - cos(negvalue * PI / 2.); break;         // l-joint, quarter of circle, vertical start
-            case 8: negvalue = 1. - pow(1. - negvalue, 2); break;           // U-joint, squared, x2
-            case 9: negvalue = pow(1 - negvalue, 2); break;                 // u-joint, squared, x2 inverse
-            case 10: negvalue = 1. - pow(1. - negvalue, 3); break;          // Q-joint, cubic, x3
-            case 11: negvalue = pow(1. - negvalue, 3); break;               // q-joint, cubic, x3 inverse
-            case 12: negvalue = (double) rand() / RAND_MAX; break;          // ~-joint, random, fill the whole angle
-            case 13: negvalue += (double) rand() / RAND_MAX - 0.5; break;   // ^-joint, pseudorandom, disperse at middle line
-            case 14: negvalue = 0.5; break;                                 // |-joint, like #-joint but placed at middle angle
-            case 15: negvalue = _negative ? 0. : 1.; break;                 // #-joint, vertical at the end angle
+            case 0:  negvalue += (double) rand() / RAND_MAX - .5; break;                           // ^-joint, pseudorandom, disperse at middle line
+            case 1:  negvalue  = (double) rand() / RAND_MAX; break;                                // ~-joint, random, fill the whole angle
+            case 2:  break;                                                                        // /-joint, linear
+            case 3:  negvalue -= sin(negvalue * PI * 2.) / (PI * 2.); break;                       // N-joint, sinus, vertical start
+            case 4:  negvalue -= sin(negvalue * PI * 2.) / (PI * 4.); break;                       // n-joint, sinus, vertical start, lazy
+            case 5:  negvalue += sin(negvalue * PI * 2.) / (PI * 2.); break;                       // Z-joint, sinus, horizontal start
+            case 6:  negvalue += sin(negvalue * PI * 2.) / (PI * 4.); break;                       // z-joint, sinus, horizontal start, lazy
+            case 7:  negvalue  = asin(negvalue * 2. - 1.) / PI + .5; break;                        // $-joint, arcsin
+            case 8:  negvalue  = sin(negvalue * M_PI_2); break;                                    // L-joint, quarter of circle, horizontal start
+            case 9:  negvalue  = 1. - cos(negvalue * M_PI_2); break;                               // l-joint, quarter of circle, vertical start
+            case 10: negvalue  = 1. - pow(1. - negvalue, 2); break;                                // U-joint, squared, x2
+            case 11: negvalue  = pow(1 - negvalue, 2); break;                                      // u-joint, squared, x2 inverse
+            case 12: negvalue  = 1. - pow(1. - negvalue, 3); break;                                // Q-joint, cubic, x3
+            case 13: negvalue  = pow(1. - negvalue, 3); break;                                     // q-joint, cubic, x3 inverse
+            case 14: negvalue  = _negative ? 0. : 1.; break;                                       // V-joint, vertical at the end angle (former #-joint)
+            case 15: negvalue  = 0.5; break;                                                       // v-joint, like I-joint but placed at middle angle (former |-joint)
+            case 16: negvalue  = (_negative ? sin(negvalue * PI) : 1 - sin(negvalue * PI)); break; // D-joint, half of circle
+            case 17: negvalue  = (_negative ? .5 : -.5) * cos(negvalue * PI * 2.) + .5; break;     // d-joint, vertical cosine wave
             }
-            angle = Geometry::deg2rad(angle_start + angle_add * negvalue);
+            angle = angle_start + angle_add * negvalue;
+            shift = shift_start + shift_add * negvalue;
         }
     } else {
+        ConfigOptionFloats rotate_angles;
         rotate_angles.deserialize(template_string);
         auto rotate_angle_idx = layer_id % rotate_angles.size();
-        angle                 = Geometry::deg2rad(rotate_angles.values[rotate_angle_idx]);
+        angle                 = rotate_angles.values[rotate_angle_idx];
     }
-    return angle;
+    return std::pair<double, Point>(Geometry::deg2rad(angle), (shift / SCALING_FACTOR).cast<coord_t>());
+};
+
+double calculate_infill_rotation_angle(const PrintObject* object,
+                                       size_t layer_id,
+                                       const PrintRegionConfig& region_config,
+                                       const double& fixed_infill_angle,
+                                       const std::string& template_string)
+{
+    return calculate_infill_position(object, layer_id, region_config, fixed_infill_angle, template_string).first;
 }
 
 struct SurfaceFillParams
@@ -233,6 +362,8 @@ struct SurfaceFillParams
     coordf_t    	overlap = 0.;
     // Angle as provided by the region config, in radians.
     float       	angle = 0.f;
+    // Shift of the infill center.
+    Point           shift = Point(0., 0.);
     // Orca: fixed_angle
     bool        fixed_angle = false;
     // Is bridging used for this fill? Bridging parameters may be used even if this->flow.bridge() is not set.
@@ -904,6 +1035,13 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                     params.symmetric_infill_y_axis = region_config.symmetric_infill_y_axis;
                 }
 
+                // ORCA: Align infill angle to model
+                float align_offset = 0.f;
+                if (region_config.align_infill_direction_to_model) {
+                    auto m       = layer.object()->trafo().matrix();
+                    align_offset = atan2((float) m(1, 0), (float) m(0, 0));
+                }
+
                 if (surface.is_solid()) {
                     if (surface.is_external() && !is_bridge) {
                         if (surface.is_top()) {
@@ -966,8 +1104,14 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                 params.gyroid_optimized = (params.pattern == ipGyroid) && region_config.gyroid_optimized;
 
                 if (params.extrusion_role == erInternalInfill) {
-                    params.angle = calculate_infill_rotation_angle(layer.object(), layer.id(), region_config.infill_direction.value,
-                                                                   region_config.sparse_infill_rotate_template.value);
+                    std::pair<double, Point> complex(calculate_infill_position(layer.object(), layer.id(), region_config,
+                                                                               region_config.sparse_infill_rotate_template.value.empty() ?
+                                                                                   region_config.infill_direction.value :
+                                                                                   align_offset,
+                                                                               region_config.sparse_infill_rotate_template.value));
+
+                    params.angle       = complex.first;
+                    params.shift       = complex.second;
                     params.fixed_angle = !region_config.sparse_infill_rotate_template.value.empty();
 
                     // Orca: special case; apply smoothing factor only for Hilbert Curve sparse infill.
@@ -981,20 +1125,21 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                         params.angle = Geometry::deg2rad(top_layer_direction_set ? region_config.top_layer_direction.value : region_config.bottom_layer_direction.value);
                         params.fixed_angle = true;
                     } else {
-                        params.angle = calculate_infill_rotation_angle(layer.object(), layer.id(), region_config.solid_infill_direction.value,
-                                                                       region_config.solid_infill_rotate_template.value);
+                        std::pair<double, Point> complex(calculate_infill_position(layer.object(), layer.id(), region_config,
+                                                                                   region_config.solid_infill_rotate_template.value.empty() ?
+                                                                                       region_config.solid_infill_direction.value :
+                                                                                       align_offset,
+                                                                                   region_config.solid_infill_rotate_template.value));
+
+                        params.angle = complex.first;
+                        params.shift = complex.second.cast<coord_t>();
                         params.fixed_angle = !region_config.solid_infill_rotate_template.value.empty();
                     }
                 }
                 params.bridge_angle = float(surface.bridge_angle);
 
                 // ORCA: Align infill angle to model
-                float align_offset = 0.f;
-                if (region_config.align_infill_direction_to_model) {
-                    auto m = layer.object()->trafo().matrix();
-                    align_offset = atan2((float)m(1, 0), (float)m(0, 0));
-                    params.angle += align_offset;
-                }
+                params.angle += align_offset;
 
                 // Calculate the actual flow we'll be using for this infill.
 		        params.bridge = is_bridge || Fill::use_bridge_flow(params.pattern);
@@ -1177,8 +1322,21 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
 	            params.density 		 = 100.f;
 		        params.extrusion_role = erSolidInfill;
 		        const PrintRegionConfig &region_config = layerm.region().config();
-                params.angle = calculate_infill_rotation_angle(layer.object(), layer.id(), region_config.solid_infill_direction.value,
-                                                               region_config.solid_infill_rotate_template.value);
+
+                // ORCA: Align infill angle to model
+                float align_offset = 0.f;
+                if (region_config.align_infill_direction_to_model) {
+                    auto m       = layer.object()->trafo().matrix();
+                    align_offset = atan2((float) m(1, 0), (float) m(0, 0));
+                }
+
+                std::pair<double, Point> complex(calculate_infill_position(layer.object(), layer.id(), region_config,
+                                                                           region_config.solid_infill_rotate_template.value.empty() ?
+                                                                               region_config.solid_infill_direction.value :
+                                                                               align_offset,
+                                                                           region_config.solid_infill_rotate_template.value));
+                params.angle       = complex.first;
+                params.shift       = complex.second.cast<coord_t>();
                 params.fixed_angle = !region_config.solid_infill_rotate_template.value.empty();
 
                 // calculate the actual flow we'll be using for this infill
@@ -1288,6 +1446,7 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
         }
         f->z 		= this->print_z;
         f->angle 	= surface_fill.params.angle;
+        f->shift    = surface_fill.params.shift;
         f->fixed_angle = surface_fill.params.fixed_angle;
         f->adapt_fill_octree   = (surface_fill.params.pattern == ipSupportCubic) ? support_fill_octree : adaptive_fill_octree;
         f->print_config        = &this->object()->print()->config();
@@ -1698,7 +1857,7 @@ void Layer::make_ironing()
                 const bool top_layer_direction_set = config.top_layer_direction.value >= 0.;
                 const double top_layer_base_angle  = top_layer_direction_set ?
                     Geometry::deg2rad(config.top_layer_direction.value) :
-                    calculate_infill_rotation_angle(this->object(), this->id(), config.solid_infill_direction.value, config.solid_infill_rotate_template.value);
+                    calculate_infill_rotation_angle(this->object(), this->id(), config, config.solid_infill_direction.value, config.solid_infill_rotate_template.value);
                 double ironing_angle = (config.ironing_angle_fixed ? 0. : top_layer_base_angle) + config.ironing_angle * M_PI / 180.;
                 if (config.align_infill_direction_to_model) {
                     auto m = this->object()->trafo().matrix();

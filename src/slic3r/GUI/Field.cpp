@@ -614,8 +614,8 @@ void Field::get_value_by_opt_type(wxString& str, const bool check_value/* = true
                 string      v;
                 std::smatch match;
                 string      ps = (m_opt.opt_key == "sparse_infill_rotate_template") ?
-                                     u8"[BT][!]?|[#][\\d]+[!]?|[+\\-]?[\\d.]+[%]?[*]?[\\d]*[/NnZz$LlUuQq~^|#]?[+\\-]?[\\d.]*[%#\'\"cm]?[m]?[BT]?[!*]?" :
-                                     u8"[#][\\d]+[!]?|[+\\-]?[\\d.]+[%]?[*]?[\\d]*[/NnZz$LlUuQq~^|#]?[+\\-]?[\\d.]*[%#\'\"cm]?[m]?[!*]?";
+                                     u8"[BT][!]?|[#][\\d]+[!]?|[+\\-_]?[\\d.]+(?:[:]?[\\d.]+|[%])?(?:[XYxy][+\\-_]?[\\d.]+[#@%\'\"c]?[m]{0,2})*[*]?[\\d]*[\\^~/NnZz$LlUuQqVvDd]?[+\\-]?[\\d.]*[%#\'\"c]?[m]{0,2}(?:[:]?[\\d.]+)?[BT]?[!*]?" :
+                                     u8"[#][\\d]+[!]?|[+\\-_]?[\\d.]+(?:[:]?[\\d.]+|[%])?(?:[XYxy][+\\-_]?[\\d.]+[#@%\'\"c]?[m]{0,2})*[*]?[\\d]*[\\^~/NnZz$LlUuQqVvDd]?[+\\-]?[\\d.]*[%#\'\"c]?[m]{0,2}(?:[:]?[\\d.]+)?[!*]?";
 
                 while (std::regex_search(ustr, match, std::regex(ps))) {
                     for (auto x : match) v += x.str() + ", ";

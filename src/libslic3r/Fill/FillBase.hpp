@@ -130,6 +130,8 @@ public:
     coordf_t    overlap;
     // in radians, ccw, 0 = East
     float       angle;
+    // own center displacement
+    Point       shift;
 
     // Orca: Fill direction is fixed absolute angle if SurfaceFillParams.fixed_angle or config.ironing_angle_fixed
     bool        fixed_angle{false};
