@@ -59,8 +59,8 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
     const size_t first_object_layer_id = object->get_layer(0)->id();
     layer_id                           = layer_id > first_object_layer_id ? layer_id - first_object_layer_id : 0;
     double angle                       = 0.0;
-    const std::string search_string    = "^~/NnZz$LlUuQqVvDd"; // Attention: the first character in the string must be the ^ symbol, as it will later be escaped in the regex.
-    if (regex_search(template_string, std::regex("[+\\-%XYxy_*@\'\"cm\\" + search_string + "]"))) { // template metalanguage of rotating infill
+    const std::string search_string    = "^~/NnZz$LlUuQq#MDd"; // Attention: the first character in the string must be the ^ symbol, as it will later be escaped in the regex.
+    if (regex_search(template_string, std::regex("[+\\-%XYxy_*@&\'\"cm\\" + search_string + "]"))) { // template metalanguage of rotating infill
         std::string template_string2 = std::regex_replace(template_string, std::regex("(^|[^1-9])0+([xX])"), "$1$2");
         std::regex del("[\\s,]+");
         std::sregex_token_iterator it(template_string2.begin(), template_string2.end(), del, -1);
@@ -128,14 +128,14 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
                             if (cs[0] == '%') { // percentage of angles
                                 angle_add *= 3.6;
                                 cs++;
-                            } else if (cs[0] == ':') { // fractional of full turn
+                            } else if (cs[0] == ':') { // fractional
                                 if (angle_add == 0.)
                                     angle_add = 1.;
                                 cs++;
                                 double angle_frac = strtod(cs, &cs);
                                 if (angle_frac == 0.)
                                     angle_frac = 1.;
-                                angle_add *= 360 / angle_frac;
+                                angle_add /= angle_frac;
                             }
                             
                             // shift section
@@ -159,9 +159,19 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
                                     cs++;
                                     shift_value = -strtod(cs, &cs);
                                 }
+                                
                                 shift_value = strtod(cs, &cs);
+                                if (cs[0] == ':') { // fractional
+                                    if (shift_value == 0.)
+                                        shift_value = 1.;
+                                    cs++;
+                                    double shift_frac = strtod(cs, &cs);
+                                    if (shift_value == 0.)
+                                        shift_value = 1.;
+                                    angle_steps /= shift_frac;
+                                }
 
-                                if (cs[0] == '#') { // value in number of standard lines
+                                if (cs[0] == '&') { // value in numerical width of standard lines
                                     shift_value *= object->config().line_width;
                                     cs++;
                                 } else if (cs[0] == '@') { // value in number of standard lines counted with infill density
@@ -247,20 +257,20 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
 
                                     _negative   = (cs[0] == '-'); // negative parameter
                                     angle_steps = abs(strtod(cs, &cs));
-
-                                    if (angle_steps && cs[0] != '\0' && cs[0] != '!') {
+                                    if (cs[0] == ':') { // fractional
+                                        if (angle_steps == 0.)
+                                            angle_steps = 1.;
+                                        cs++;
+                                        double angle_frac = strtod(cs, &cs);
+                                        if (angle_frac == 0.)
+                                            angle_frac = 1.;
+                                        angle_steps /= angle_frac;
+                                    }
+                                    if (!angle_steps && cs[0] != '\0' && cs[0] != '!') {
                                         if (cs[0] == '%') // value in the percents of fill_z
                                             limit_fill_z = angle_steps * object->height() * 1e-8;
-                                        else if (cs[0] == ':') { // fractional of full height
-                                            if (angle_steps == 0.)
-                                                angle_steps = 1.;
-                                            cs++;
-                                            double angle_frac = strtod(cs, &cs);
-                                            if (angle_frac == 0.)
-                                                angle_frac = 1.;
-                                            limit_fill_z = angle_steps / angle_frac * object->height() * 1e-6;
-                                        } else if (cs[0] == '#') // value in the feet
-                                            limit_fill_z = angle_steps * object->config().layer_height;
+                                        else if (cs[0] == '#') // value in the feet
+                                            limit_fill_z = (int) angle_steps * object->config().layer_height;
                                         else if (cs[0] == '\'') // value in the feet
                                             limit_fill_z = angle_steps * 12 * 25.4;
                                         else if (cs[0] == '\"') // value in the inches
@@ -322,8 +332,8 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
             case 11: negvalue  = pow(1 - negvalue, 2); break;                                      // u-joint, squared, x2 inverse
             case 12: negvalue  = 1. - pow(1. - negvalue, 3); break;                                // Q-joint, cubic, x3
             case 13: negvalue  = pow(1. - negvalue, 3); break;                                     // q-joint, cubic, x3 inverse
-            case 14: negvalue  = _negative ? 0. : 1.; break;                                       // V-joint, vertical at the end angle (former #-joint)
-            case 15: negvalue  = 0.5; break;                                                       // v-joint, like I-joint but placed at middle angle (former |-joint)
+            case 14: negvalue  = _negative ? 0. : 1.; break;                                       // #-joint, vertical at the end angle
+            case 15: negvalue  = 0.5; break;                                                       // M-joint, like #-joint but placed at middle angle (former |-joint)
             case 16: negvalue  = (_negative ? sin(negvalue * PI) : 1 - sin(negvalue * PI)); break; // D-joint, half of circle
             case 17: negvalue  = (_negative ? .5 : -.5) * cos(negvalue * PI * 2.) + .5; break;     // d-joint, vertical cosine wave
             }
