@@ -125,10 +125,7 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
                             if (!angle_add && (cs[0] == '+' || cs[0] == '-'))
                                 cs++;
 
-                            if (cs[0] == '%') { // percentage of angles
-                                angle_add *= 3.6;
-                                cs++;
-                            } else if (cs[0] == ':') { // fractional
+                            if (cs[0] == ':') { // fractional
                                 if (angle_add == 0.)
                                     angle_add = 1.;
                                 cs++;
@@ -137,6 +134,11 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
                                     angle_frac = 1.;
                                 angle_add /= angle_frac;
                             }
+
+                            if (cs[0] == '%') { // percentage of full circle
+                                angle_add *= 3.6;
+                                cs++;
+                            } 
                             
                             // shift section
                             bool shift_reset = false;
@@ -270,7 +272,7 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
                                         if (cs[0] == '%') // value in the percents of fill_z
                                             limit_fill_z = angle_steps * object->height() * 1e-8;
                                         else if (cs[0] == '#') // value in the feet
-                                            limit_fill_z = (int) angle_steps * object->config().layer_height;
+                                            limit_fill_z = angle_steps * object->config().layer_height;
                                         else if (cs[0] == '\'') // value in the feet
                                             limit_fill_z = angle_steps * 12 * 25.4;
                                         else if (cs[0] == '\"') // value in the inches
