@@ -8296,6 +8296,10 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
         if(path.role() == erInternalBridgeInfill) // ORCA: Add support for separate internal bridge fan speed control
             pre_fan_enabled = true;
 
+        // Orca: stuffed walls
+        int s_coin(0); // set random coin for studded walls
+        double s_shift(path.width / m_config.stuffed_divider.value);
+
         double path_length = 0.;
         for (size_t i = 1; i < new_points.size(); i++) {
             std::string tempDescription = description;
@@ -8401,6 +8405,38 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                 gcode += m_writer.extrude_to_xyz(Vec3d(dest2d.x(), dest2d.y(), z), e,
                                                  GCodeWriter::full_gcode_comment ? tempDescription : "");
             } else if (sloped == nullptr) {
+                // Orca: Stuffing paths print
+                if (path.m_stuffed && line_length > s_shift * 2.) {
+                    double s_value = abs(.01 * path.m_stuffed);
+                    auto s_p       = pre_processed_point.p.head<2>();
+                    auto s_v       = processed_point.p.head<2>() - pre_processed_point.p.head<2>();
+                    double s_point = s_shift * (EPSILON + (double) rand() / RAND_MAX); // set random start point
+                    double s_length(unscale_(s_v.norm()));
+                    if (s_value <= 1.) { // if stuffing value <= 100%
+                        double s_e_per_mm = e_per_mm; // set intermediate value
+                        for (; s_point < s_length; s_point += s_shift) {
+                            auto vm = s_p + s_v * (s_point / s_length);
+                            gcode += m_writer.extrude_to_xy(point_to_gcode_quantized(vm), std::min(s_point, s_shift) * s_e_per_mm, "");
+                            s_e_per_mm = e_per_mm * std::max((s_coin++ % 2 ? (1 + s_value) : (1 - s_value)), 0.);
+                        }
+                    } else { // retracts will be added
+                        for (; s_point < s_length; s_point += s_shift) {
+                            if (s_coin++ % 2) {
+                                double tiny_shift(s_shift * .33);
+                                dE = e_per_mm * tiny_shift * (s_value - 1) * 10;
+                                auto vm1 = s_p + s_v * ((s_point - s_shift * .67) / s_length);
+                                gcode += m_writer.extrude_to_xy(point_to_gcode_quantized(vm1), -dE, ""); // get retract in the idle shift
+                                auto vm2 = s_p + s_v * ((s_point - s_shift * .33) / s_length);
+                                gcode += m_writer.extrude_to_xy(point_to_gcode_quantized(vm2), 0, "");   // dumb turn then unretract in the work cycle
+                            } else
+                                dE = e_per_mm * std::min(s_point, s_shift) * 2;
+                            auto vm = s_p + s_v * (s_point / s_length);
+                            gcode += m_writer.extrude_to_xy(point_to_gcode_quantized(vm), dE, "");       // work cycle
+                        }
+                    }
+                    double s_rest(s_length - s_point);
+                    dE = e_per_mm * (s_rest < EPSILON ? 0. : s_rest); // calculate extrusion amount for the end of line
+                } 
                 // Normal extrusion
                 gcode += m_writer.extrude_to_xy(p.head<2>(), dE, GCodeWriter::full_gcode_comment ? tempDescription : "");
             } else {

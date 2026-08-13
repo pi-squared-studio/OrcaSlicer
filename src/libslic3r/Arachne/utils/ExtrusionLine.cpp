@@ -287,17 +287,17 @@ double ExtrusionLine::area() const
 } // namespace Slic3r::Arachne
 
 namespace Slic3r {
-void extrusion_paths_append(ExtrusionPaths &dst, const ClipperLib_Z::Paths &extrusion_paths, const ExtrusionRole role, const Flow &flow)
+void extrusion_paths_append(ExtrusionPaths &dst, const ClipperLib_Z::Paths &extrusion_paths, const ExtrusionRole role, const Flow &flow, int stuff_value)
 {
     for (const ClipperLib_Z::Path &extrusion_path : extrusion_paths) {
         ThickPolyline thick_polyline = Arachne::to_thick_polyline(extrusion_path);
-        Slic3r::append(dst, thick_polyline_to_multi_path(thick_polyline, role, flow, scaled<float>(0.05), float(SCALED_EPSILON)).paths);
+        Slic3r::append(dst, thick_polyline_to_multi_path(thick_polyline, role, flow, scaled<float>(0.05), float(SCALED_EPSILON), stuff_value).paths);
     }
 }
 
-void extrusion_paths_append(ExtrusionPaths &dst, const Arachne::ExtrusionLine &extrusion, const ExtrusionRole role, const Flow &flow)
+void extrusion_paths_append(ExtrusionPaths &dst, const Arachne::ExtrusionLine &extrusion, const ExtrusionRole role, const Flow &flow, int stuff_value)
 {
     ThickPolyline thick_polyline = Arachne::to_thick_polyline(extrusion);
-    Slic3r::append(dst, thick_polyline_to_multi_path(thick_polyline, role, flow, scaled<float>(0.05), float(SCALED_EPSILON)).paths);
+    Slic3r::append(dst, thick_polyline_to_multi_path(thick_polyline, role, flow, scaled<float>(0.05), float(SCALED_EPSILON), stuff_value).paths);
 }
 } // namespace Slic3r

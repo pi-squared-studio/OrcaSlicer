@@ -155,6 +155,12 @@ public:
 
     static std::string role_to_string(ExtrusionRole role);
     static ExtrusionRole string_to_role(const std::string_view role);
+
+// Orca: used for generate the stuffed walls
+public:
+    int m_stuffed = 0;
+    virtual int get_stuffed() { return m_stuffed; };
+    virtual void set_stuffed(int in) { m_stuffed = in; };
 };
 
 typedef std::vector<ExtrusionEntity*> ExtrusionEntitiesPtr;
@@ -190,7 +196,8 @@ public:
         , m_can_reverse(rhs.m_can_reverse)
         , m_role(rhs.m_role)
         , m_no_extrusion(rhs.m_no_extrusion)
-    {}
+    { this->set_stuffed(rhs.m_stuffed); }
+
     ExtrusionPath(ExtrusionPath &&rhs)
         : polyline(std::move(rhs.polyline))
         , overhang_degree(rhs.overhang_degree)
@@ -203,7 +210,8 @@ public:
         , m_can_reverse(rhs.m_can_reverse)
         , m_role(rhs.m_role)
         , m_no_extrusion(rhs.m_no_extrusion)
-    {}
+    { this->set_stuffed(rhs.m_stuffed); }
+
     ExtrusionPath(const Polyline3 &polyline, const ExtrusionPath &rhs)
         : polyline(polyline)
         , overhang_degree(rhs.overhang_degree)
@@ -216,7 +224,8 @@ public:
         , m_can_reverse(rhs.m_can_reverse)
         , m_role(rhs.m_role)
         , m_no_extrusion(rhs.m_no_extrusion)
-    {}
+    { this->set_stuffed(rhs.m_stuffed); }
+
     ExtrusionPath(Polyline3 &&polyline, const ExtrusionPath &rhs)
         : polyline(std::move(polyline))
         , overhang_degree(rhs.overhang_degree)
@@ -229,7 +238,7 @@ public:
         , m_can_reverse(rhs.m_can_reverse)
         , m_role(rhs.m_role)
         , m_no_extrusion(rhs.m_no_extrusion)
-    {}
+    { this->set_stuffed(rhs.m_stuffed); }
 
     ExtrusionPath& operator=(const ExtrusionPath& rhs) {
         m_can_reverse = rhs.m_can_reverse;
@@ -243,6 +252,7 @@ public:
         this->overhang_degree = rhs.overhang_degree;
         this->curve_degree = rhs.curve_degree;
         this->polyline = rhs.polyline;
+        this->set_stuffed(rhs.m_stuffed);
         return *this;
     }
     ExtrusionPath& operator=(ExtrusionPath&& rhs) {
@@ -257,6 +267,7 @@ public:
         this->overhang_degree = rhs.overhang_degree;
         this->curve_degree = rhs.curve_degree;
         this->polyline = std::move(rhs.polyline);
+        this->set_stuffed(rhs.m_stuffed);
         return *this;
     }
 
@@ -308,6 +319,7 @@ public:
     void set_extrusion_role(ExtrusionRole extrusion_role) { m_role = extrusion_role; }
     void set_reverse() override { m_can_reverse = false; }
     bool can_reverse() const override { return m_can_reverse; }
+    int get_stuffed() { return ExtrusionEntity::m_stuffed; };
 
 private:
     void _inflate_collection(const Polylines &polylines, ExtrusionEntityCollection* collection) const;

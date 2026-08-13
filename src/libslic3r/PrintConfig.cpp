@@ -2518,6 +2518,59 @@ void PrintConfigDef::init_fff_params()
     def->mode     = comAdvanced;
     def->set_default_value(new ConfigOptionBool{false});
 
+    def           = this->add("stuffed_inner_walls", coPercent);
+    def->label    = L("Stuffed inner walls");
+    def->tooltip  = L("Switches to inner walls printing mode with variable flow.\n"
+                      "It allows you change the physical parameters of wall strength without significantly changing their shape (the stuffing effect) by additional mixing of the filament in the extruder.\n" 
+                      "This function increases the overload of extruder unit in proportion to the specified parameter values.\n\n"
+                      "Settable values:\n"
+                      "0% - this option is off;\n"
+                      "1%...100% - change in the stuffing flow;\n" 
+                      ">100%...200% - change in flow with retraction (Every 10% overdraft corresponds to a material volume equal to the square of the nozzle diameter multiplied by the extrusion height = d²*h).\n"
+                      "CAUTION! The values with retraction are experimental!\n"
+                      "Make sure your printer can correctly process G-codes with reverse movement in the extruder and does not treat them as a regular retraction. "
+                      "Check the the printer and Orca Slicer settings for this!\n"
+                      "The printing speed remains virtually unchanged in retract‑free mode. "
+                      "When retracting, the printing speed may decrease by an amount corresponding to the transient processes.\n");
+    def->min      = 0;
+    def->max      = 200;
+    def->sidetext = L("%");
+    def->category = L("Quality");
+    def->mode     = comExpert;
+    def->set_default_value(new ConfigOptionPercent(0));
+
+    def          = this->add("stuffed_outer_walls", coPercent);
+    def->label   = L("Stuffed outer walls");
+    def->tooltip = L("Switches to outer walls printing mode with variable flow.\n"
+                     "It allows you change the physical parameters of wall strength without significantly changing their shape (the stuffing effect) by additional mixing of the filament in the extruder.\n"
+                     "This function increases the overload of extruder unit in proportion to the specified parameter values.\n\n"
+                     "Settable values:\n"
+                     "0% - this option is off;\n"
+                     "1%...100% - change in the stuffing flow;\n"
+                     ">100%...200% - change in flow with retraction (Every 10% overdraft corresponds to a material volume equal to the square of the nozzle diameter multiplied by the extrusion height = d²*h).\n"
+                     "CAUTION! The values with retraction are experimental!\n"
+                     "Make sure your printer can correctly process G-codes with reverse movement in the extruder and does not treat them as a regular retraction. "
+                     "Check the the printer and Orca Slicer settings for this!\n""The printing speed remains virtually unchanged in retract‑free mode. "
+                     "When retracting, the printing speed may decrease by an amount corresponding to the transient processes.\n");
+    def->min      = 0;
+    def->max      = 200;
+    def->sidetext = L("%");
+    def->category = L("Quality");
+    def->mode     = comExpert;
+    def->set_default_value(new ConfigOptionPercent(0));
+
+    def           = this->add("stuffed_divider", coFloat);
+    def->label    = L("Stuffed divider");
+    def->category = L("Quality");
+    def->tooltip  = L("Allows to set the frequency samples coefficient for stuffing.\n"
+                      "When the value is 1, it equals the sample length equal to the [nozzle_diameter] or [line_width] parameter.\n"
+                      "When the parameter is increased, the G‑code size will be proportionally increased for the involved stuffed lines. "
+                      "This may slow down printing on old printers or increase the size of the transmitted G‑code data. ");
+    def->min      = 1;
+    def->max      = 8;
+    def->mode     = comExpert;
+    def->set_default_value(new ConfigOptionFloat(2));
+
     def = this->add("wall_direction", coEnum);
     def->label = L("Wall loop direction");
     def->category = L("Quality");

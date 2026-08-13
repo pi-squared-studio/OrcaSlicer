@@ -221,6 +221,11 @@ static ExtrusionEntityCollection traverse_loops(const PerimeterGenerator &perime
             path.mm3_per_mm = extrusion_mm3_per_mm;
             path.width = extrusion_width;
             path.height     = (float)perimeter_generator.layer_height;
+
+            // Orca: set stuffed walls
+            path.set_stuffed(is_external ? perimeter_generator.config->stuffed_outer_walls.value :
+                                           perimeter_generator.config->stuffed_inner_walls.value);
+
             paths.emplace_back(std::move(path));
         }
 
@@ -527,7 +532,11 @@ static ExtrusionEntityCollection traverse_extrusions(const PerimeterGenerator& p
                 steep_overhang_hole    = true;
             }
 
-            extrusion_paths_append(paths, *extrusion, role, is_external ? perimeter_generator.ext_perimeter_flow : perimeter_generator.perimeter_flow);
+            // Orca: set stuffed walls
+            int s_value = is_external ? perimeter_generator.config->stuffed_outer_walls.value :
+                                        perimeter_generator.config->stuffed_inner_walls.value;
+
+            extrusion_paths_append(paths, *extrusion, role, is_external ? perimeter_generator.ext_perimeter_flow : perimeter_generator.perimeter_flow, s_value);
         }
 
         // Append paths to collection.

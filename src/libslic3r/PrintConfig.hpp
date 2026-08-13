@@ -1390,6 +1390,9 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionEnum<WallSequence>,  wall_sequence))
     ((ConfigOptionBool,                is_infill_first))
     ((ConfigOptionBool,                small_area_infill_flow_compensation))
+    ((ConfigOptionPercent,              stuffed_inner_walls))
+    ((ConfigOptionPercent,              stuffed_outer_walls))
+    ((ConfigOptionFloat,                stuffed_divider))
     ((ConfigOptionEnum<WallDirection>,  wall_direction))
 
     // Orca: other flow ratios (available for overriding, if set_other_flow_ratios is enabled)
