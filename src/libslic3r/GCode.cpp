@@ -8406,9 +8406,9 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                 gcode += m_writer.extrude_to_xyz(Vec3d(dest2d.x(), dest2d.y(), z), e,
                                                  GCodeWriter::full_gcode_comment ? tempDescription : "");
             } else if (sloped == nullptr) {
-                // Orca: Stuffing paths print
-                if (path.m_stuffed && line_length > s_shift * 2.) {
-                    double s_value = abs(.01 * path.m_stuffed);
+                // Orca: Stuffed paths print
+                if (path.stuffed && line_length > s_shift * 3.) {
+                    double s_value = abs(.01 * path.stuffed);
                     auto s_p       = pre_processed_point.p.head<2>();
                     auto s_v       = processed_point.p.head<2>() - pre_processed_point.p.head<2>();
                     double s_point = s_shift * (EPSILON + (double) rand() / RAND_MAX); // set random start point

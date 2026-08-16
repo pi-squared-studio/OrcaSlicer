@@ -155,12 +155,6 @@ public:
 
     static std::string role_to_string(ExtrusionRole role);
     static ExtrusionRole string_to_role(const std::string_view role);
-
-// Orca: used for generate the stuffed walls
-public:
-    int m_stuffed = 0;
-    virtual int get_stuffed() { return m_stuffed; };
-    virtual void set_stuffed(int in) { m_stuffed = in; };
 };
 
 typedef std::vector<ExtrusionEntity*> ExtrusionEntitiesPtr;
@@ -179,6 +173,8 @@ public:
     float height;
     double smooth_speed = 0;
     bool z_contoured = false;
+    // Orca: used for generate the stuffed walls
+    int stuffed = 0;
 
     ExtrusionPath() : mm3_per_mm(-1), width(-1), height(-1), m_role(erNone), m_no_extrusion(false) {}
     ExtrusionPath(ExtrusionRole role) : mm3_per_mm(-1), width(-1), height(-1), m_role(role), m_no_extrusion(false) {}
@@ -196,7 +192,8 @@ public:
         , m_can_reverse(rhs.m_can_reverse)
         , m_role(rhs.m_role)
         , m_no_extrusion(rhs.m_no_extrusion)
-    { this->set_stuffed(rhs.m_stuffed); }
+        , stuffed(rhs.stuffed)
+    {}
 
     ExtrusionPath(ExtrusionPath &&rhs)
         : polyline(std::move(rhs.polyline))
@@ -210,7 +207,8 @@ public:
         , m_can_reverse(rhs.m_can_reverse)
         , m_role(rhs.m_role)
         , m_no_extrusion(rhs.m_no_extrusion)
-    { this->set_stuffed(rhs.m_stuffed); }
+        , stuffed(rhs.stuffed)
+    {}
 
     ExtrusionPath(const Polyline3 &polyline, const ExtrusionPath &rhs)
         : polyline(polyline)
@@ -224,7 +222,8 @@ public:
         , m_can_reverse(rhs.m_can_reverse)
         , m_role(rhs.m_role)
         , m_no_extrusion(rhs.m_no_extrusion)
-    { this->set_stuffed(rhs.m_stuffed); }
+        , stuffed(rhs.stuffed)
+    {}
 
     ExtrusionPath(Polyline3 &&polyline, const ExtrusionPath &rhs)
         : polyline(std::move(polyline))
@@ -238,7 +237,8 @@ public:
         , m_can_reverse(rhs.m_can_reverse)
         , m_role(rhs.m_role)
         , m_no_extrusion(rhs.m_no_extrusion)
-    { this->set_stuffed(rhs.m_stuffed); }
+        , stuffed(rhs.stuffed)
+    {}
 
     ExtrusionPath& operator=(const ExtrusionPath& rhs) {
         m_can_reverse = rhs.m_can_reverse;
@@ -252,7 +252,7 @@ public:
         this->overhang_degree = rhs.overhang_degree;
         this->curve_degree = rhs.curve_degree;
         this->polyline = rhs.polyline;
-        this->set_stuffed(rhs.m_stuffed);
+        this->stuffed = rhs.stuffed;
         return *this;
     }
     ExtrusionPath& operator=(ExtrusionPath&& rhs) {
@@ -267,7 +267,7 @@ public:
         this->overhang_degree = rhs.overhang_degree;
         this->curve_degree = rhs.curve_degree;
         this->polyline = std::move(rhs.polyline);
-        this->set_stuffed(rhs.m_stuffed);
+        this->stuffed = rhs.stuffed;
         return *this;
     }
 
@@ -319,7 +319,6 @@ public:
     void set_extrusion_role(ExtrusionRole extrusion_role) { m_role = extrusion_role; }
     void set_reverse() override { m_can_reverse = false; }
     bool can_reverse() const override { return m_can_reverse; }
-    int get_stuffed() { return ExtrusionEntity::m_stuffed; };
 
 private:
     void _inflate_collection(const Polylines &polylines, ExtrusionEntityCollection* collection) const;
@@ -569,33 +568,36 @@ public:
     double slope_path_length();
 };
 
-inline void extrusion_paths_append(ExtrusionPaths &dst, Polylines &polylines, ExtrusionRole role, double mm3_per_mm, float width, float height)
+inline void extrusion_paths_append(ExtrusionPaths &dst, Polylines &polylines, ExtrusionRole role, double mm3_per_mm, float width, float height, int stuff_value = 0)
 {
     dst.reserve(dst.size() + polylines.size());
     for (Polyline &polyline : polylines)
         if (polyline.is_valid()) {
             dst.emplace_back(role, mm3_per_mm, width, height);
             dst.back().polyline = Polyline3(polyline);
+            dst.back().stuffed = stuff_value;
         }
 }
 
-inline void extrusion_paths_append(ExtrusionPaths &dst, Polylines &&polylines, ExtrusionRole role, double mm3_per_mm, float width, float height)
+inline void extrusion_paths_append(ExtrusionPaths &dst, Polylines &&polylines, ExtrusionRole role, double mm3_per_mm, float width, float height, int stuff_value = 0)
 {
     dst.reserve(dst.size() + polylines.size());
     for (Polyline &polyline : polylines)
         if (polyline.is_valid()) {
             dst.emplace_back(role, mm3_per_mm, width, height);
             dst.back().polyline = Polyline3(std::move(polyline));
+            dst.back().stuffed  = stuff_value;
         }
     polylines.clear();
 }
 
-inline void extrusion_paths_append(ExtrusionPaths &dst, Polyline &&polyline, ExtrusionRole role, double mm3_per_mm, float width, float height)
+inline void extrusion_paths_append(ExtrusionPaths &dst, Polyline &&polyline, ExtrusionRole role, double mm3_per_mm, float width, float height, int stuff_value= 0)
 {
     dst.reserve(dst.size() + 1);
     if (polyline.is_valid()) {
         dst.emplace_back(role, mm3_per_mm, width, height);
         dst.back().polyline = Polyline3(std::move(polyline));
+        dst.back().stuffed  = stuff_value;
     }
 }
 

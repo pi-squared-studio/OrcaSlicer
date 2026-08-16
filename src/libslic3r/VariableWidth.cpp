@@ -2,12 +2,11 @@
 
 namespace Slic3r {
 
-ExtrusionMultiPath thick_polyline_to_multi_path(const ThickPolyline& thick_polyline, ExtrusionRole role, const Flow& flow, const float tolerance, const float merge_tolerance, int stuff_value)
+ExtrusionMultiPath thick_polyline_to_multi_path(const ThickPolyline& thick_polyline, ExtrusionRole role, const Flow& flow, const float tolerance, const float merge_tolerance)
 {
     ExtrusionMultiPath multi_path;
     ExtrusionPath      path(role);
     ThickLines         lines = thick_polyline.thicklines();
-
     for (int i = 0; i < (int)lines.size(); ++i) {
         const ThickLine& line = lines[i];
         assert(line.a_width >= SCALED_EPSILON && line.b_width >= SCALED_EPSILON);
@@ -90,8 +89,6 @@ ExtrusionMultiPath thick_polyline_to_multi_path(const ThickPolyline& thick_polyl
             }
         }
     }
-    // Orca: set stuffed wall
-    path.set_stuffed(stuff_value);
     if (path.polyline.is_valid())
         multi_path.paths.emplace_back(std::move(path));
     return multi_path;
