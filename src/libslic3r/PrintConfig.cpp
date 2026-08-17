@@ -2559,8 +2559,8 @@ void PrintConfigDef::init_fff_params()
     def->mode     = comExpert;
     def->set_default_value(new ConfigOptionPercent(0));
 
-    def           = this->add("stuffed_divider", coFloat);
-    def->label    = L("Stuffed divider");
+    def           = this->add("stuff_divider", coFloat);
+    def->label    = L("Stuff divider");
     def->category = L("Quality");
     def->tooltip  = L("Allows to set the frequency samples coefficient for stuffing.\n"
                       "When the value is 1, it equals the sample length equal to the [nozzle_diameter] or [line_width] parameter.\n"
@@ -2570,6 +2570,15 @@ void PrintConfigDef::init_fff_params()
     def->max      = 8;
     def->mode     = comExpert;
     def->set_default_value(new ConfigOptionFloat(2));
+
+    def           = this->add("stuff_force", coFloat);
+    def->label    = L("Stuff force");
+    def->category = L("Quality");
+    def->tooltip  = L("It allows you to increase the strength of the stuffing by reducing the extrusion distance. ");
+    def->min      = 1;
+    def->max      = 4;
+    def->mode     = comExpert;
+    def->set_default_value(new ConfigOptionFloat(1));
 
     def = this->add("wall_direction", coEnum);
     def->label = L("Wall loop direction");

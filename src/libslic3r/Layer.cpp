@@ -148,7 +148,8 @@ bool Layer::is_perimeter_compatible(const Print& print, const PrintRegion& a, co
 		&& config.is_infill_first             == other_config.is_infill_first
         && config.stuffed_inner_walls         == other_config.stuffed_inner_walls
         && config.stuffed_outer_walls         == other_config.stuffed_outer_walls
-        && config.stuffed_divider             == other_config.stuffed_divider
+        && config.stuff_divider               == other_config.stuff_divider
+        && config.stuff_force                 == other_config.stuff_force
 		&& config.inner_wall_speed.get_at(print.get_extruder_id(config.outer_wall_filament_id)) == other_config.inner_wall_speed.get_at(print.get_extruder_id(config.outer_wall_filament_id))
 		&& config.outer_wall_speed.get_at(print.get_extruder_id(config.outer_wall_filament_id)) == other_config.outer_wall_speed.get_at(print.get_extruder_id(config.outer_wall_filament_id))
 		&& config.small_perimeter_speed.get_at(print.get_extruder_id(config.outer_wall_filament_id)) == other_config.small_perimeter_speed.get_at(print.get_extruder_id(config.outer_wall_filament_id))

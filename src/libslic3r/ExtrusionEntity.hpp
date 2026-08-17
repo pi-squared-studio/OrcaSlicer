@@ -236,6 +236,7 @@ public:
         , m_no_extrusion(rhs.m_no_extrusion)
         , stuffed(rhs.stuffed)
     {}
+
     ExtrusionPath& operator=(const ExtrusionPath& rhs) {
         m_can_reverse = rhs.m_can_reverse;
         m_role = rhs.m_role;
