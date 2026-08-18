@@ -160,9 +160,9 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
                                 if (cs[0] == '_') { // get value
                                     cs++;
                                     shift_value = -strtod(cs, &cs);
-                                }
-                                
-                                shift_value = strtod(cs, &cs);
+                                } else
+                                    shift_value = strtod(cs, &cs);
+
                                 if (cs[0] == ':') { // fractional
                                     if (shift_value == 0.)
                                         shift_value = 1.;
@@ -170,7 +170,7 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
                                     double shift_frac = strtod(cs, &cs);
                                     if (shift_value == 0.)
                                         shift_value = 1.;
-                                    angle_steps /= shift_frac;
+                                    shift_value /= shift_frac;
                                 }
 
                                 if (cs[0] == '&') { // value in numerical width of standard lines
@@ -195,9 +195,9 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
                                     if (cs[0] == 'm')
                                         cs++;
                                 } else if (cs[0] == 'm') {
-                                    if (cs[1] == 'm') // value in the millimeters
+                                    if (cs[1] == 'm') // value in the millimeters == 2x 'm' (mm). Just skip.
                                         cs++;
-                                    else 
+                                    else              // value in the meters == 1x 'm' (m) 
                                         shift_value *= 1000.;
                                 }
 
@@ -268,7 +268,7 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
                                             angle_frac = 1.;
                                         angle_steps /= angle_frac;
                                     }
-                                    if (!angle_steps && cs[0] != '\0' && cs[0] != '!') {
+                                    if (angle_steps && cs[0] != '\0' && cs[0] != '!') {
                                         if (cs[0] == '%') // value in the percents of fill_z
                                             limit_fill_z = angle_steps * object->height() * 1e-8;
                                         else if (cs[0] == '#') // value in the feet
