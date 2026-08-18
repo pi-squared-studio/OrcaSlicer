@@ -2730,10 +2730,6 @@ void TabPrint::build()
         optgroup->append_single_option_line("min_width_top_surface", "quality_settings_wall_and_surfaces#threshold");
         optgroup->append_single_option_line("reduce_crossing_wall", "quality_settings_wall_and_surfaces#avoid-crossing-walls");
         optgroup->append_single_option_line("max_travel_detour_distance", "quality_settings_wall_and_surfaces#max-detour-length");
-        optgroup->append_single_option_line("stuffed_outer_walls", "quality_settings_wall_and_surfaces#stuffed_outer_walls");
-        optgroup->append_single_option_line("stuffed_inner_walls", "quality_settings_wall_and_surfaces#stuffed_inner_walls");
-        optgroup->append_single_option_line("stuff_divider", "quality_settings_wall_and_surfaces#stuffed_walls");
-        optgroup->append_single_option_line("stuff_force", "quality_settings_wall_and_surfaces#stuffed_walls");
 
         optgroup->append_single_option_line("small_area_infill_flow_compensation", "quality_settings_wall_and_surfaces#small-area-flow-compensation");
         Option option = optgroup->get_option("small_area_infill_flow_compensation_model");
@@ -3076,6 +3072,12 @@ void TabPrint::build()
         optgroup->append_single_option_line("fuzzy_skin_ripple_offset", "others_settings_fuzzy_skin#ripple-offset");
         optgroup->append_single_option_line("fuzzy_skin_layers_between_ripple_offset", "others_settings_fuzzy_skin#layers-between-ripple-offset");
         optgroup->append_single_option_line("fuzzy_skin_first_layer", "others_settings_fuzzy_skin#apply-fuzzy-skin-to-first-layer");
+
+        optgroup = page->new_optgroup(L("Stuffed lines"), L"param_stuffed_lines");
+        optgroup->append_single_option_line("stuff_divider", "others_settings_stuffed_lines#stuffed_lines");
+        optgroup->append_single_option_line("stuff_force", "others_settings_stuffed_lines#stuffed_lines");
+        optgroup->append_single_option_line("stuffed_outer_walls", "others_settings_stuffed_lines#stuffed_outer_walls");
+        optgroup->append_single_option_line("stuffed_inner_walls", "others_settings_stuffed_lines#stuffed_inner_walls");
 
         optgroup = page->new_optgroup(L("G-code output"), L"param_gcode");
         optgroup->append_single_option_line("reduce_infill_retraction", "others_settings_g_code_output#reduce-infill-retraction");

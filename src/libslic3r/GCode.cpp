@@ -8426,14 +8426,17 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                             dE = semi_shift * (1 - s_value) * e_per_mm;
                         else {
                             double s_cidle(s_shift - s_idle);
-                            dE       = e_per_mm * path.height * (s_value - 1.) * 10;
-                            Point vm1 = (s_p + s_v * ((s_idle_point + s_cidle * 0.33) / line_length)).cast<coord_t>();
-                            gcode += m_writer.extrude_to_xy(point_to_gcode_quantized(vm1), -dE, ""); // get retract
-                            Point vm2 = (s_p + s_v * ((s_idle_point + s_cidle * 0.67) / line_length)).cast<coord_t>();
-                            gcode += m_writer.extrude_to_xy(point_to_gcode_quantized(vm2), 0, "");   // dumb turn
+                            dE        = e_per_mm * path.height * (s_value - 1.) * 10;
+                            // The commented fields are an extension of the retract envelope. Them can set either based on the amount of material dE or based on the duration s_idle * effective length. 
+                            //Point vm1 = (s_p + s_v * ((s_idle_point + s_cidle * 0.25) / line_length)).cast<coord_t>();
+                            //gcode += m_writer.extrude_to_xy(point_to_gcode_quantized(vm1), -dE, "");      // retract
+                            Point vm2 = (s_p + s_v * ((s_idle_point + s_cidle * 0.50) / line_length)).cast<coord_t>();
+                            gcode += m_writer.extrude_to_xy(point_to_gcode_quantized(vm2), -dE, ""); // retract
+                            //Point vm3 = (s_p + s_v * ((s_idle_point + s_cidle * 0.75) / line_length)).cast<coord_t>();
+                            //gcode += m_writer.extrude_to_xy(point_to_gcode_quantized(vm3), dE / 2., ""); // retract
                         }
-                        Point vm3 = (s_p + s_v * ((s_point + s_shift) / line_length)).cast<coord_t>();
-                        gcode += m_writer.extrude_to_xy(point_to_gcode_quantized(vm3), dE, "");      // work cycle
+                        Point vm4 = (s_p + s_v * ((s_point + s_shift) / line_length)).cast<coord_t>();
+                        gcode += m_writer.extrude_to_xy(point_to_gcode_quantized(vm4), dE, "");           // work cycle
                     }
                     double s_rest(line_length - s_point);
                     dE = e_per_mm * s_rest; // calculate extrusion amount for the end of line
