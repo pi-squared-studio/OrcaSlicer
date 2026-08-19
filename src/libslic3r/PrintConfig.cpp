@@ -2527,7 +2527,7 @@ void PrintConfigDef::init_fff_params()
                       "0% - this option is off;\n"
                       "1%...100% - change in the stuffing flow;\n" 
                       ">100%...200% - change in flow with retraction (Every 10% overdraft corresponds to a material volume equal to the square of the nozzle diameter multiplied by the extrusion height = d²*h).\n"
-                      "CAUTION! The values with retraction are experimental!\n"
+                      "CAUTION! The values with retraction are EXPERIMENTAL!\n"
                       "Make sure your printer can correctly process G-codes with reverse movement in the extruder and does not treat them as a regular retraction. "
                       "Check the the printer and Orca Slicer settings for this!\n"
                       "The printing speed remains virtually unchanged in retract‑free mode. "
@@ -2535,7 +2535,7 @@ void PrintConfigDef::init_fff_params()
     def->min      = 0;
     def->max      = 200;
     def->sidetext = L("%");
-    def->category = L("Quality");
+    def->category = L("Other");
     def->mode     = comExpert;
     def->set_default_value(new ConfigOptionPercent(0));
 
@@ -2548,20 +2548,20 @@ void PrintConfigDef::init_fff_params()
                      "0% - this option is off;\n"
                      "1%...100% - change in the stuffing flow;\n"
                      ">100%...200% - change in flow with retraction (Every 10% overdraft corresponds to a material volume equal to the square of the nozzle diameter multiplied by the extrusion height = d²*h).\n"
-                     "CAUTION! The values with retraction are experimental!\n"
+                     "CAUTION! The values with retraction are EXPERIMENTAL!\n"
                      "Make sure your printer can correctly process G-codes with reverse movement in the extruder and does not treat them as a regular retraction. "
                      "Check the the printer and Orca Slicer settings for this!\n""The printing speed remains virtually unchanged in retract‑free mode. "
                      "When retracting, the printing speed may decrease by an amount corresponding to the transient processes.\n");
     def->min      = 0;
     def->max      = 200;
     def->sidetext = L("%");
-    def->category = L("Quality");
+    def->category = L("Other");
     def->mode     = comExpert;
     def->set_default_value(new ConfigOptionPercent(0));
 
     def           = this->add("stuff_divider", coFloat);
     def->label    = L("Stuff divider");
-    def->category = L("Quality");
+    def->category = L("Other");
     def->tooltip  = L("Allows to set the frequency samples coefficient for stuffing.\n"
                       "When the value is 1, it equals the sample length equal to the [nozzle_diameter] or [line_width] parameter.\n"
                       "When the parameter is increased, the G‑code size will be proportionally increased for the involved stuffed lines. "
@@ -2573,12 +2573,25 @@ void PrintConfigDef::init_fff_params()
 
     def           = this->add("stuff_force", coFloat);
     def->label    = L("Stuff force");
-    def->category = L("Quality");
+    def->category = L("Other");
     def->tooltip  = L("It allows you to increase the strength of the stuffing by reducing the extrusion distance. ");
     def->min      = 1;
     def->max      = 4;
     def->mode     = comExpert;
     def->set_default_value(new ConfigOptionFloat(1));
+
+    def           = this->add("stuff_z_tamping", coPercent);
+    def->label    = L("Z-tamping");
+    def->tooltip  = L("Additional compaction of the material using additional movement of the extruder along the Z‑axis.\n"
+                      "This option is EXPERIMENTAL! Use it at your own risk. \n"  
+                      "Make sure your printer supports this function and that there won’t be any problems with the additional load on the extruder unit and the Z‑axis as a whole due to the vibrations that may occur.\n"
+                      "100% means the vibration amplitude is equal to the [layer_height]. ");
+    def->min      = 0;
+    def->max      = 100;
+    def->sidetext = L("%");
+    def->category = L("Other");
+    def->mode     = comExpert;
+    def->set_default_value(new ConfigOptionPercent(0));
 
     def = this->add("wall_direction", coEnum);
     def->label = L("Wall loop direction");

@@ -1033,7 +1033,7 @@ static std::vector<std::string> s_Preset_print_options{
     "staggered_inner_seams",
     "wall_sequence",
     "is_infill_first",
-    "stuffed_inner_walls", "stuffed_outer_walls", "stuff_divider", "stuff_force",
+    "stuffed_inner_walls", "stuffed_outer_walls", "stuff_divider", "stuff_force", "stuff_z_tamping",
     "sparse_infill_density",
     "fill_multiline",
     "gyroid_optimized",
