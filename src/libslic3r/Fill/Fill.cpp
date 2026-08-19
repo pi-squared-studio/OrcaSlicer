@@ -60,7 +60,9 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
     layer_id                           = layer_id > first_object_layer_id ? layer_id - first_object_layer_id : 0;
     double angle                       = 0.0;
     const std::string search_string    = "^~/NnZz$LlUuQq#MDd"; // Attention: the first character in the string must be the ^ symbol, as it will later be escaped in the regex.
-    if (regex_search(template_string, std::regex("[+\\-%XYxy_*@&\'\"cm\\" + search_string + "]"))) { // template metalanguage of rotating infill
+    const std::string coord_string     = "XxYy";
+    const std::string angle_string     = "A+-_0123456789.";
+    if (regex_search(template_string, std::regex("[+\\-%AXYxy_*@&\'\"cm\\" + search_string + "]"))) { // template metalanguage of rotating infill
         std::string template_string2 = std::regex_replace(template_string, std::regex("(^|[^1-9])0+([xX])"), "$1$2");
         std::regex del("[\\s,]+");
         std::sregex_token_iterator it(template_string2.begin(), template_string2.end(), del, -1);
@@ -74,16 +76,15 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
         double angle_add    = 0;
         double angle_steps  = 1;
         double angle_start  = 0;
+        Vec2d shift_add     = Vec2d(0., 0.);
+        Vec2d shift_start   = Vec2d(0., 0.);
         double limit_fill_z = object->get_layer(0)->bottom_z();
         double start_fill_z = limit_fill_z;
         // The raft height, or 0 without a raft.
         const double print_z_offset = object->slicing_parameters().object_print_z_min;
         bool _noop          = false;
         auto fill_form      = std::string::npos;
-        bool _absolute      = false;
         bool _negative      = false;
-        Vec2d shift_add     = Vec2d(0., 0.);
-        Vec2d shift_start   = Vec2d(0., 0.);
         std::vector<bool> stop(tk.size(), false);
 
         for (int i = 0; i <= layer_id; i++) {
@@ -102,146 +103,165 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
                     fill_form    = std::string::npos;
                     do {
                         if (!stop[t]) {
-                            _noop     = false;
-                            _negative = false;
+                            _noop       = false;
+                            _negative   = false;
                             angle_start += angle_add;
+                            angle_add   = 0.;
                             shift_start += shift_add;
-                            shift_add    = Vec2d(0., 0.);
-                            angle_steps  = 1;
-                            repeats      = 1;
+                            shift_add   = Vec2d(0., 0.);
+                            angle_steps = 1;
+                            repeats     = 1;
                             if (tk[t].find('!') != std::string::npos) // this is an one-time instruction
                                 stop[t] = true;
 
                             char* cs = &tk[t][0];
 
-                            //_absolute = ((cs[0] >= '0' && cs[0] <= '9') && !(cs[0] == '+' || cs[0] == '-')); // absolute/relative
-                            _absolute = is_absolute(cs); // absolute/relative
-                            if (cs[0] == '_') {          // negative shift
-                                cs++;
-                                angle_add = -strtod(cs, &cs); // read negative absolute angle parameter
-                            } else
-                                angle_add = strtod(cs, &cs); // read absolute angle parameter
+                            double angle_absolute(0.);
+                            double angle_relative(0.);
+                            double shift_angle(0.);
+                            Vec2d shift_absolute(0., 0.);
+                            Vec2d shift_absolute2(0., 0.);
+                            Vec2d shift_relative(0., 0.);
+                            Vec2d shift_relative2(0., 0.);
+                            bool has_abs_angle = false;
+                            bool has_abs_shift = false;
+                            for (;;) {
+                                bool is_abs_shift = false;
+                                char* shift_mark = cs;
+                                double shift_value(0.);
 
-                            if (!angle_add && (cs[0] == '+' || cs[0] == '-'))
-                                cs++;
+                                if (coord_string.find(cs[0]) != std::string::npos) { // [XxYy-zone]
+                                    cs++;
+                                    if (is_abs_shift = is_absolute(cs)) // absolute/relative
+                                        has_abs_shift = true;
 
-                            if (cs[0] == ':') { // fractional
-                                if (angle_add == 0.)
-                                    angle_add = 1.;
-                                cs++;
-                                double angle_frac = strtod(cs, &cs);
-                                if (angle_frac == 0.)
-                                    angle_frac = 1.;
-                                angle_add /= angle_frac;
+                                    if (cs[0] == '_') { // get value
+                                        cs++;
+                                        shift_value = -strtod(cs, &cs);
+                                    } else
+                                        shift_value = strtod(cs, &cs);
+
+                                    if (cs[0] == ':') { // fractional
+                                        if (shift_value == 0.)
+                                            shift_value = 1.;
+                                        cs++;
+                                        double shift_frac = strtod(cs, &cs);
+                                        if (shift_value == 0.)
+                                            shift_value = 1.;
+                                        shift_value /= shift_frac;
+                                    }
+
+                                    if (cs[0] == '&') { // value in numerical width of standard lines
+                                        shift_value *= object->config().line_width;
+                                        cs++;
+                                    } else if (cs[0] == '@') { // value in number of standard lines counted with infill density
+                                        auto object_config = object->config();
+                                        shift_value *= object_config.line_width * region_config.fill_multiline / region_config.sparse_infill_density.get_abs_value(1);
+                                        cs++;
+                                    } else if (cs[0] == '%') { // value in the percents of model height
+                                        shift_value *= object->height() * 1e-8;
+                                        cs++;
+                                    } else if (cs[0] == '\'') { // value in the feet
+                                        shift_value *= 12 * 25.4;
+                                        cs++;
+                                    } else if (cs[0] == '\"') { // value in the inches
+                                        shift_value *= 25.4;
+                                        cs++;
+                                    } else if (cs[0] == 'c') { // value in centimeters
+                                        shift_value *= 10.;
+                                        cs++;
+                                        if (cs[0] == 'm')
+                                            cs++;
+                                    } else if (cs[0] == 'm') {
+                                        if (cs[1] == 'm') // value in the millimeters == 2x 'm' (mm). Just skip.
+                                            cs++;
+                                        else // value in the meters == 1x 'm' (m) 
+                                            shift_value *= 1000.;
+                                    }
+
+                                    if (shift_mark[0] == 'X') { // get X shift
+                                        if (is_abs_shift)
+                                            shift_absolute[0] += shift_value;
+                                        else
+                                            shift_relative[0] += shift_value;
+                                    } else if (shift_mark[0] == 'Y') { // get Y shift
+                                        if (is_abs_shift)
+                                            shift_absolute[1] += shift_value;
+                                        else
+                                            shift_relative[1] += shift_value;
+                                    } else if (shift_mark[0] == 'x') { // get relative X shift
+                                        if (is_abs_shift)
+                                            shift_absolute2[0] += shift_value;
+                                        else
+                                            shift_relative2[0] += shift_value;
+                                    } else if (shift_mark[0] == 'y') { // get relative Y shift
+                                        if (is_abs_shift)
+                                            shift_absolute2[1] += shift_value;
+                                        else
+                                            shift_relative2[1] += shift_value;
+                                    }
+                                } else if (angle_string.find(cs[0]) != std::string::npos) { // [A-zone] 
+                                    if (cs[0] == 'A') // Angle mark (Optional)
+                                        cs++;
+                                    
+                                    double angle_value(0);
+                                    bool is_abs_angle = is_absolute(cs); // absolute/relative
+                                    has_abs_angle |= is_abs_angle;
+                                    if (cs[0] == '_') { // negative shift
+                                        cs++;
+                                        angle_value = -strtod(cs, &cs); // read negative absolute angle parameter
+                                    } else
+                                        angle_value = strtod(cs, &cs); // read absolute angle parameter
+
+                                    if (!angle_value && (cs[0] == '+' || cs[0] == '-'))
+                                        cs++;
+
+                                    if (cs[0] == ':') { // fractional
+                                        if (angle_value == 0.)
+                                            angle_value = 1.;
+                                        cs++;
+                                        double angle_frac = strtod(cs, &cs);
+                                        if (angle_frac == 0.)
+                                            angle_frac = 1.;
+                                        angle_value /= angle_frac;
+                                    } 
+
+                                    if (cs[0] == '%') { // percentage of full circle
+                                        angle_value *= 3.6;
+                                        cs++;
+                                    }
+                                    if (is_abs_angle)
+                                        angle_absolute += angle_value;
+                                    else
+                                        angle_relative += angle_value;
+                                } else
+                                    break;
                             }
 
-                            if (cs[0] == '%') { // percentage of full circle
-                                angle_add *= 3.6;
-                                cs++;
-                            } 
+                            if (has_abs_angle) // is absolute
+                                angle_start = angle_absolute;
                             
-                            // shift section
-                            bool shift_reset = false;
-                            double shift_angle(0.);
-                            Vec2d shift_base(0., 0.);
-                            Vec2d shift_base2(0., 0.);
-                            Vec2d shift_vector(0., 0.);
-                            Vec2d shift_vector2(0., 0.);
-                            for (;;) {
-                                bool shift_absolute = false;
-                                char* shift_sign = cs;
-                                double shift_value(0.);
-                                if (!(cs[0] == 'X' || cs[0] == 'Y' || cs[0] == 'x' || cs[0] == 'y')) // get shift
-                                    break;
-                                cs++;
-                                if (shift_absolute = is_absolute(cs)) // absolute/relative
-                                    shift_reset = true;
+                            angle_add = angle_relative;
 
-                                if (cs[0] == '_') { // get value
-                                    cs++;
-                                    shift_value = -strtod(cs, &cs);
-                                } else
-                                    shift_value = strtod(cs, &cs);
-
-                                if (cs[0] == ':') { // fractional
-                                    if (shift_value == 0.)
-                                        shift_value = 1.;
-                                    cs++;
-                                    double shift_frac = strtod(cs, &cs);
-                                    if (shift_value == 0.)
-                                        shift_value = 1.;
-                                    shift_value /= shift_frac;
-                                }
-
-                                if (cs[0] == '&') { // value in numerical width of standard lines
-                                    shift_value *= object->config().line_width;
-                                    cs++;
-                                } else if (cs[0] == '@') { // value in number of standard lines counted with infill density
-                                    auto object_config = object->config();
-                                    shift_value *= object_config.line_width * region_config.fill_multiline / region_config.sparse_infill_density.get_abs_value(1);
-                                    cs++;
-                                } else if (cs[0] == '%') { // value in the percents of model height
-                                    shift_value *= object->height() * 1e-8;
-                                    cs++;
-                                } else if (cs[0] == '\'') { // value in the feet
-                                    shift_value *= 12 * 25.4;
-                                    cs++;
-                                } else if (cs[0] == '\"') {// value in the inches
-                                    shift_value *= 25.4;
-                                    cs++;
-                                } else if (cs[0] == 'c') { // value in centimeters
-                                    shift_value *= 10.;
-                                    cs++;
-                                    if (cs[0] == 'm')
-                                        cs++;
-                                } else if (cs[0] == 'm') {
-                                    if (cs[1] == 'm') // value in the millimeters == 2x 'm' (mm). Just skip.
-                                        cs++;
-                                    else              // value in the meters == 1x 'm' (m) 
-                                        shift_value *= 1000.;
-                                }
-
-                                if (shift_sign[0] == 'X') { // get X shift
-                                    if (shift_absolute)
-                                        shift_base[0] += shift_value;
-                                    else
-                                        shift_vector[0] += shift_value;
-                                } else if (shift_sign[0] == 'Y') { // get Y shift
-                                    if (shift_absolute)
-                                        shift_base[1] += shift_value;
-                                    else
-                                        shift_vector[1] += shift_value;
-                                } else if (shift_sign[0] == 'x') { // get relative X shift
-                                    if (shift_absolute)
-                                        shift_base2[0] += shift_value;
-                                    else
-                                        shift_vector2[0] += shift_value;
-                                } else if (shift_sign[0] == 'y') { // get relative Y shift
-                                    if (shift_absolute)
-                                        shift_base2[1] += shift_value;
-                                    else
-                                        shift_vector2[1] += shift_value;
-                                }
-                            };
                             double angle_complex(fixed_infill_angle + Geometry::deg2rad(angle_start));
-                            if (shift_reset)
-                                if (!shift_base.isZero())
-                                    if (!shift_base2.isZero())
-                                        shift_start = rotate_point_CW(fixed_infill_angle, shift_base) +
-                                                      rotate_point_CW(angle_complex, shift_base2);
+                            if (has_abs_shift)
+                                if (!shift_absolute.isZero())
+                                    if (!shift_absolute2.isZero())
+                                        shift_start = rotate_point_CW(fixed_infill_angle, shift_absolute) +
+                                                      rotate_point_CW(angle_complex, shift_absolute2);
                                     else
-                                        shift_start = rotate_point_CW(fixed_infill_angle, shift_base);
-                                else if (!shift_base2.isZero()) 
-                                        shift_start = rotate_point_CW(angle_complex, shift_base2);
+                                        shift_start = rotate_point_CW(fixed_infill_angle, shift_absolute);
+                                else if (!shift_absolute2.isZero())
+                                    shift_start = rotate_point_CW(angle_complex, shift_absolute2);
 
-                            if (!shift_vector.isZero())
-                                if (!shift_vector2.isZero())
-                                    shift_add = rotate_point_CW(fixed_infill_angle, shift_vector) + 
-                                                rotate_point_CW(angle_complex, shift_vector2);
+                            if (!shift_relative.isZero())
+                                if (!shift_relative2.isZero())
+                                    shift_add = rotate_point_CW(fixed_infill_angle, shift_relative) +
+                                                rotate_point_CW(angle_complex, shift_relative2);
                                 else
-                                    shift_add = rotate_point_CW(fixed_infill_angle, shift_vector);
-                            else if (!shift_vector2.isZero())
-                                shift_add = rotate_point_CW(angle_complex, shift_vector2);
+                                    shift_add = rotate_point_CW(fixed_infill_angle, shift_relative);
+                            else if (!shift_relative2.isZero())
+                                shift_add = rotate_point_CW(angle_complex, shift_relative2);
 
                             int tit = tk[t].find('*');
                             if (tit != std::string::npos) // overall angle_cycles
@@ -291,7 +311,7 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
                                     }
                                 }
                                 if (angle_steps) { // if limit_fill_z does not setting by lenght method. Get count the layer id above model height
-                                    if (fill_form == std::string::npos && !_absolute) {
+                                    if (fill_form == std::string::npos) {
                                         angle_add *= (int) angle_steps;
                                         shift_add *= (int) angle_steps;
                                     }
@@ -303,10 +323,6 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
                                 repeats = std::max(repeats - 1, 0);
                             } else {
                                 _noop = true; // set the dumb cycle
-                            }
-                            if (_absolute) {  // is absolute
-                                angle_start    = angle_add;
-                                angle_add      = 0;
                             }
                         }
                         if (++t >= tk.size())
