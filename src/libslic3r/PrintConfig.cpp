@@ -2585,8 +2585,9 @@ void PrintConfigDef::init_fff_params()
     def->tooltip  = L("Additional compaction of the material using additional movement of the extruder along the Z‑axis.\n"
                       "This option is EXPERIMENTAL! Use it at your own risk. \n"  
                       "Make sure your printer supports this function and that there won’t be any problems with the additional load on the extruder unit and the Z‑axis as a whole due to the vibrations that may occur.\n"
-                      "100% means the vibration amplitude is equal to the [layer_height]. ");
-    def->min      = 0;
+                      "100% means the vibration amplitude is equal to the [layer_height]. "
+                      "A negative value implies aggressive tamping. ");
+    def->min      = -100;
     def->max      = 100;
     def->sidetext = L("%");
     def->category = L("Other");
