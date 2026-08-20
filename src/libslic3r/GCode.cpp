@@ -8410,8 +8410,6 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                     const bool is_aggresive_tamping(m_config.stuff_z_tamping.value < 0);
                     const double layer_height(path.height* abs(m_config.stuff_z_tamping.value) * .01);
                     const double s_value(abs(path.stuffed) * .01);
-                    //Vec2d s_p(point_to_gcode(pre_processed_point.p).head<2>());
-                    //Vec2d s_v(point_to_gcode(processed_point.p).head<2>() - s_p);
                     Vec3d s_p(point_to_gcode(pre_processed_point.p));
                     Vec3d s_v(point_to_gcode(processed_point.p) - s_p);
                     double semi_width(path.width * 0.5);
