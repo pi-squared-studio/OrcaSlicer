@@ -8408,7 +8408,7 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                 // Orca: Stuffed paths print
                 if (path.stuffed && line_length > path.width) {
                     const bool is_aggresive_tamping(m_config.stuff_z_tamping.value < 0);
-                    const double layer_height(path.height* abs(m_config.stuff_z_tamping.value) * .01);
+                    const double tamping_height(path.height * abs(m_config.stuff_z_tamping.value) * .01);
                     const double s_value(abs(path.stuffed) * .01);
                     Vec3d s_p(point_to_gcode(pre_processed_point.p));
                     Vec3d s_v(point_to_gcode(processed_point.p) - s_p);
@@ -8424,19 +8424,19 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                     for (; s_point < woquart_length; s_point += s_shift) {
                         double s_idle_point(s_point + s_idle);
                         Vec3d vm1(s_p + s_v * (s_idle_point / line_length));
-                        vm1(2) = m_nominal_z + (is_aggresive_tamping ? 0 : layer_height);
+                        vm1(2) = m_nominal_z + (is_aggresive_tamping ? 0 : tamping_height);
                         gcode += m_writer.extrude_to_xyz(vm1, semi_shift * (1 + std::min(s_value, 1.)) * e_per_mm, "");
                         if (s_value <= 1.) // if stuffing value <= 100%
                             dE = semi_shift * (1 - s_value) * e_per_mm;
                         else {
                             double s_cidle(s_shift - s_idle);
-                            dE        = e_per_mm * path.height * (s_value - 1.) * 10;
+                            dE = e_per_mm * path.height * (s_value - 1.) * 10;
                             Vec3d vm2(s_p + s_v * ((s_idle_point + s_cidle * 0.50) / line_length));
-                            vm2(2) = m_nominal_z + (is_aggresive_tamping ? 0 : layer_height);
+                            vm2(2) = m_nominal_z + tamping_height / 2.;
                             gcode += m_writer.extrude_to_xyz(vm2, -dE, ""); // retract
                         }
                         Vec3d vm4(s_p + s_v * (s_point + s_shift) / line_length);
-                        vm4(2) = m_nominal_z + (is_aggresive_tamping ? layer_height : 0);
+                        vm4(2) = m_nominal_z + (is_aggresive_tamping ? tamping_height : 0);
                         gcode += m_writer.extrude_to_xyz(vm4, dE, ""); // work cycle
                     }
                     double s_rest(line_length - s_point);
