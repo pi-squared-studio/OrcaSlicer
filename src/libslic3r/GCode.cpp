@@ -7469,37 +7469,35 @@ double GCode::calc_max_volumetric_speed(const double layer_height, const double 
     return res;
 }
 
-std::string GCode::_extrude_stuffed_line(const ExtrusionPath& path, double& s_value,
+std::string GCode::_extrude_stuffed_line(const ExtrusionPath& path, double& stuff_value, double& tamp_value,
                                          Vec3d pre_point, Vec3d point,
                                          double e_per_mm, std::string description)
 {
     std::string gcode;
-    const bool is_aggresive_tamping(m_config.stuff_z_tamping.value < 0);
-    const double tamping_height(path.height * abs(m_config.stuff_z_tamping.value) * .01);
+    const bool is_aggresive_tamping(tamp_value < 0);
+    const double tamping_height(path.height * tamp_value);
     double s_shift(path.width / m_config.stuff_divider.value);
-    pre_point(2) = m_nominal_z;
-    point(2) = m_nominal_z;
+    point(2) = pre_point(2) = m_nominal_z;
     Vec3d s_vector(point - pre_point);
     const double line_length = s_vector.norm();
-    double semi_width(path.width * 0.5);
     double dE;
-    double woquart_length(line_length - path.width * 0.75);
-    double s_point(semi_width / 2. + (semi_width - EPSILON) * (double) rand() / RAND_MAX); // set random start point
-    double s_force((m_config.stuff_force.value - 1.) / 4.);
     double semi_shift(s_shift * 0.5);
+    double s_point((s_shift - EPSILON) * (double) rand() / RAND_MAX); // set random start point
+    double s_force((m_config.stuff_force.value - 1.) / 4.);
     double s_idle(semi_shift * (1 - s_force));
     Vec3d vm(pre_point + s_vector * (s_point / line_length));
     gcode += m_writer.extrude_to_xyz(vm, s_point * e_per_mm, "");
-    for (; s_point < woquart_length; s_point += s_shift) {
+    double wo_length(line_length - s_shift);
+    for (; s_point < wo_length; s_point += s_shift) {
         double s_idle_point(s_point + s_idle);
         Vec3d vm1(pre_point + s_vector * (s_idle_point / line_length));
         vm1(2) += is_aggresive_tamping ? 0 : tamping_height;
-        gcode += m_writer.extrude_to_xyz(vm1, semi_shift * (1 + std::min(s_value, 1.)) * e_per_mm, "");
-        if (s_value <= 1.) // if stuffing value <= 100%
-            dE = semi_shift * (1 - s_value) * e_per_mm;
+        gcode += m_writer.extrude_to_xyz(vm1, semi_shift * (1 + std::min(stuff_value, 1.)) * e_per_mm, "");
+        if (stuff_value <= 1.) // if stuffing value <= 100%
+            dE = semi_shift * (1 - stuff_value) * e_per_mm;
         else {
             double s_cidle(s_shift - s_idle);
-            dE = e_per_mm * path.height * (s_value - 1.) * 10;
+            dE = e_per_mm * path.height * (stuff_value - 1.) * 10;
             Vec3d vm2(pre_point + s_vector * ((s_idle_point + s_cidle * 0.50) / line_length));
             vm2(2) += tamping_height / 2.;
             gcode += m_writer.extrude_to_xyz(vm2, -dE, ""); // retract
@@ -7508,9 +7506,7 @@ std::string GCode::_extrude_stuffed_line(const ExtrusionPath& path, double& s_va
         vm4(2) += is_aggresive_tamping ? tamping_height : 0;
         gcode += m_writer.extrude_to_xyz(vm4, dE, ""); // work cycle
     }
-    double s_rest(line_length - s_point);
-    dE = e_per_mm * s_rest; // calculate extrusion amount for the end of line
-    gcode += m_writer.extrude_to_xyz(point, dE, GCodeWriter::full_gcode_comment ? description : "");
+    gcode += m_writer.extrude_to_xyz(point, e_per_mm * (line_length - s_point), GCodeWriter::full_gcode_comment ? description : "");
     return gcode;
 }
 
@@ -7522,17 +7518,21 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
         description += " (bridge)";
 
     // Orca: stuffed lines
-    double stuffed(0.);
+    double tamp_value(0.);
+    double stuff_value(0.);
     if (this->layer_id() == 0 && abs(layer()->bottom_z()) < EPSILON) {
         if (m_config.stuffed_first_layer_perimeters.value && (path.role() == erPerimeter || path.role() == erExternalPerimeter))
-            stuffed = m_config.stuffed_first_layer_perimeters.value * .01;
-        if (m_config.stuffed_first_layer_perimeters.value && (path.role() == erBottomSurface || path.role() == erInternalInfill || path.role() == erSolidInfill))
-            stuffed = m_config.stuffed_first_layer_infill.value * .01;
+            stuff_value = m_config.stuffed_first_layer_perimeters.value * .01;
+        if (m_config.stuffed_first_layer_perimeters.value &&
+            (path.role() == erBottomSurface || path.role() == erInternalInfill || path.role() == erSolidInfill))
+            stuff_value = m_config.stuffed_first_layer_infill.value * .01;
+        tamp_value  = m_config.stuff_z_tamping_first_layer.value * .01;
     } else {
         if (path.role() == erPerimeter)
-            stuffed = m_config.stuffed_inner_walls.value * .01;
+            stuff_value = m_config.stuffed_inner_walls.value * .01;
         else if (path.role() == erExternalPerimeter)
-            stuffed = m_config.stuffed_outer_walls.value * .01;
+            stuff_value = m_config.stuffed_outer_walls.value * .01;
+        tamp_value = m_config.stuff_z_tamping.value * .01;
     }
 
     const ExtrusionPathSloped* sloped = dynamic_cast<const ExtrusionPathSloped*>(&path);
@@ -8253,8 +8253,8 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
 
                     } else if (sloped == nullptr) {
                         // Orca: Stuffed paths print
-                        if (stuffed && line_length >= path.width) {
-                            gcode += _extrude_stuffed_line(path, stuffed, this->point_to_gcode(line.a),
+                        if (stuff_value) {
+                            gcode += _extrude_stuffed_line(path, stuff_value, tamp_value, this->point_to_gcode(line.a),
                                                            this->point_to_gcode(line.b), e_per_mm, tempDescription);
                         } else {
                         // Normal extrusion
@@ -8469,8 +8469,8 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                                                  GCodeWriter::full_gcode_comment ? tempDescription : "");
             } else if (sloped == nullptr) {
                 // Orca: Stuffed paths print
-                if (stuffed && line_length > path.width) {
-                    gcode += _extrude_stuffed_line(path, stuffed, point_to_gcode(pre_processed_point.p),
+                if (stuff_value) {
+                    gcode += _extrude_stuffed_line(path, stuff_value, tamp_value, point_to_gcode(pre_processed_point.p),
                                                    point_to_gcode(processed_point.p), e_per_mm, tempDescription);
                 } else // Normal extrusion
                     gcode += m_writer.extrude_to_xy(p.head<2>(), dE, GCodeWriter::full_gcode_comment ? tempDescription : "");

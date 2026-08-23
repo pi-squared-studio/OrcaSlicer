@@ -764,7 +764,7 @@ private:
     void update_layer_related_config(int layer_id);
 
     double      calc_max_volumetric_speed(const double layer_height, const double line_width, const std::string co_str);
-    std::string _extrude_stuffed_line(const ExtrusionPath& path, double& s_value,
+    std::string _extrude_stuffed_line(const ExtrusionPath& path, double& stuff_value, double& tamp_value,
                                       Vec3d pre_point, Vec3d point,
                                       double e_per_mm, std::string description = "");
     std::string _extrude(const ExtrusionPath &path, std::string description = "", double speed = -1);

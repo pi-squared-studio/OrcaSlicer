@@ -1423,6 +1423,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloat,                stuff_divider))
     ((ConfigOptionFloat,                stuff_force))
     ((ConfigOptionPercent,              stuff_z_tamping))
+    ((ConfigOptionPercent,              stuff_z_tamping_first_layer))
     ((ConfigOptionEnum<WallDirection>,  wall_direction))
 
     // Orca: other flow ratios (available for overriding, if set_other_flow_ratios is enabled)
