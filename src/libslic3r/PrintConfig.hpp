@@ -1418,6 +1418,8 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionBool,                small_area_infill_flow_compensation))
     ((ConfigOptionPercent,              stuffed_inner_walls))
     ((ConfigOptionPercent,              stuffed_outer_walls))
+    ((ConfigOptionPercent,              stuffed_first_layer_perimeters))
+    ((ConfigOptionPercent,              stuffed_first_layer_infill))
     ((ConfigOptionFloat,                stuff_divider))
     ((ConfigOptionFloat,                stuff_force))
     ((ConfigOptionPercent,              stuff_z_tamping))

@@ -163,6 +163,8 @@ bool Layer::is_perimeter_compatible(const Print& print, const PrintRegion& a, co
 		&& config.wall_direction                         == other_config.wall_direction
 		&& config.opt_serialize("inner_wall_line_width") == other_config.opt_serialize("inner_wall_line_width")
 		&& config.opt_serialize("outer_wall_line_width") == other_config.opt_serialize("outer_wall_line_width")
+        && config.opt_serialize("stuffed_first_layer_perimeters")   == other_config.opt_serialize("stuffed_first_layer_perimeters")
+        && config.opt_serialize("stuffed_first_layer_infill")   == other_config.opt_serialize("stuffed_first_layer_infill")
 		&& config.detect_thin_wall                  == other_config.detect_thin_wall
 		&& config.infill_wall_overlap              == other_config.infill_wall_overlap
         && config.top_bottom_infill_wall_overlap              == other_config.top_bottom_infill_wall_overlap

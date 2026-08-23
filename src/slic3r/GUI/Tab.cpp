@@ -3079,6 +3079,8 @@ void TabPrint::build()
         optgroup->append_single_option_line("stuff_z_tamping", "others_settings_stuffed_lines#stuffed_lines");
         optgroup->append_single_option_line("stuffed_outer_walls", "others_settings_stuffed_lines#stuffed_outer_walls");
         optgroup->append_single_option_line("stuffed_inner_walls", "others_settings_stuffed_lines#stuffed_inner_walls");
+        optgroup->append_single_option_line("stuffed_first_layer_perimeters", "others_settings_stuffed_lines#stuffed_first_layer_perimeters");
+        optgroup->append_single_option_line("stuffed_first_layer_infill", "others_settings_stuffed_lines#stuffed_first_layer_infill");
 
         optgroup = page->new_optgroup(L("G-code output"), L"param_gcode");
         optgroup->append_single_option_line("reduce_infill_retraction", "others_settings_g_code_output#reduce-infill-retraction");

@@ -224,14 +224,6 @@ static ExtrusionEntityCollection traverse_loops(const PerimeterGenerator &perime
 
             paths.emplace_back(std::move(path));
         }
-        // Orca: set stuffed walls
-        if (perimeter_generator.config->stuffed_inner_walls.value || perimeter_generator.config->stuffed_outer_walls.value)
-            for (ExtrusionPath& path : paths) {
-                if (path.role() == erPerimeter)
-                    path.stuffed = perimeter_generator.config->stuffed_inner_walls.value;
-                if (path.role() == erExternalPerimeter)
-                    path.stuffed = perimeter_generator.config->stuffed_outer_walls.value;
-            }
         coll.append(ExtrusionLoop(std::move(paths), loop_role));
     }
 
@@ -540,14 +532,6 @@ static ExtrusionEntityCollection traverse_extrusions(const PerimeterGenerator& p
 
         // Append paths to collection.
         if (!paths.empty()) {
-            // Orca: set stuffed walls
-            if (perimeter_generator.config->stuffed_inner_walls.value || perimeter_generator.config->stuffed_outer_walls.value)
-                for (ExtrusionPath& path : paths) {
-                    if (path.role() == erPerimeter)
-                        path.stuffed = perimeter_generator.config->stuffed_inner_walls.value;
-                    if (path.role() == erExternalPerimeter)
-                        path.stuffed = perimeter_generator.config->stuffed_outer_walls.value;
-            }
             if (extrusion->is_closed) {
                 ExtrusionLoop extrusion_loop(std::move(paths), pg_extrusion.is_contour ? elrDefault : elrHole);
                 if ((perimeter_generator.config->wall_direction == WallDirection::CounterClockwise) ==
