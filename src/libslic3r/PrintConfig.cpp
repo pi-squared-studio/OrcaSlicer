@@ -2559,6 +2559,30 @@ void PrintConfigDef::init_fff_params()
     def->mode     = comExpert;
     def->set_default_value(new ConfigOptionPercent(0));
 
+    def           = this->add("stuffed_top_infill", coPercent);
+    def->label    = L("Stuffed top infill");
+    def->tooltip  = L("Switches to top infill printing mode with variable flow.\n"
+                      "It allows you change the physical parameters of layer strength without significantly changing their shape (the "
+                      "stuffing effect) by additional mixing of the filament in the extruder.\n"
+                      "This function increases the overload of extruder unit in proportion to the specified parameter values.\n\n"
+                      "Settable values:\n"
+                      "0% - this option is off;\n"
+                      "1%...100% - change in the stuffing flow;\n"
+                      ">100%...200% - change in flow with retraction (Every 10% overdraft corresponds to a material volume equal to the "
+                      "square of the nozzle diameter multiplied by the extrusion height = d²*h).\n"
+                      "CAUTION! The values with retraction are EXPERIMENTAL!\n"
+                      "Make sure your printer can correctly process G-codes with reverse movement in the extruder and does not treat them "
+                      "as a regular retraction. "
+                      "Check the the printer and Orca Slicer settings for this!\n"
+                      "The printing speed remains virtually unchanged in retract‑free mode. "
+                      "When retracting, the printing speed may decrease by an amount corresponding to the transient processes.\n");
+    def->min      = 0;
+    def->max      = 200;
+    def->sidetext = L("%");
+    def->category = L("Other");
+    def->mode     = comExpert;
+    def->set_default_value(new ConfigOptionPercent(0));
+
     def           = this->add("stuffed_first_layer_perimeters", coPercent);
     def->label    = L("Stuffed first layer perimeters");
     def->tooltip  = L("Switches to first layer perimeters printing mode with variable flow.\n"

@@ -7521,13 +7521,14 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
     double tamp_value(0.);
     double stuff_value(0.);
     if (this->layer_id() == 0 && abs(layer()->bottom_z()) < EPSILON) {
-        if (m_config.stuffed_first_layer_perimeters.value && (path.role() == erPerimeter || path.role() == erExternalPerimeter))
+        if (path.role() == erPerimeter || path.role() == erExternalPerimeter)
             stuff_value = m_config.stuffed_first_layer_perimeters.value * .01;
-        if (m_config.stuffed_first_layer_perimeters.value &&
-            (path.role() == erBottomSurface || path.role() == erInternalInfill || path.role() == erSolidInfill))
+        if (path.role() == erBottomSurface || path.role() == erInternalInfill || path.role() == erSolidInfill)
             stuff_value = m_config.stuffed_first_layer_infill.value * .01;
         tamp_value  = m_config.stuff_z_tamping_first_layer.value * .01;
     } else {
+        if (path.role() == erTopSolidInfill)
+            stuff_value = m_config.stuffed_top_infill.value * .01;
         if (path.role() == erPerimeter)
             stuff_value = m_config.stuffed_inner_walls.value * .01;
         else if (path.role() == erExternalPerimeter)

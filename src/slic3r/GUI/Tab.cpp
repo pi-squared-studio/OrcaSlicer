@@ -3077,6 +3077,7 @@ void TabPrint::build()
         optgroup->append_single_option_line("stuff_divider", "others_settings_stuffed_lines#stuffed_lines");
         optgroup->append_single_option_line("stuff_force", "others_settings_stuffed_lines#stuffed_lines");
         optgroup->append_single_option_line("stuff_z_tamping", "others_settings_stuffed_lines#stuffed_lines");
+        optgroup->append_single_option_line("stuffed_top_infill", "others_settings_stuffed_lines#stuffed_top_infill");
         optgroup->append_single_option_line("stuffed_outer_walls", "others_settings_stuffed_lines#stuffed_outer_walls");
         optgroup->append_single_option_line("stuffed_inner_walls", "others_settings_stuffed_lines#stuffed_inner_walls");
         optgroup->append_single_option_line("stuff_z_tamping_first_layer", "others_settings_stuffed_lines#stuffed_lines");

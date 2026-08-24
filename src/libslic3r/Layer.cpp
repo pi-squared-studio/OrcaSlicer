@@ -146,6 +146,7 @@ bool Layer::is_perimeter_compatible(const Print& print, const PrintRegion& a, co
 		&& config.wall_loops                  == other_config.wall_loops
 		&& config.wall_sequence               == other_config.wall_sequence
 		&& config.is_infill_first             == other_config.is_infill_first
+        && config.stuffed_top_infill          == other_config.stuffed_top_infill
         && config.stuffed_inner_walls         == other_config.stuffed_inner_walls
         && config.stuffed_outer_walls         == other_config.stuffed_outer_walls
         && config.stuff_divider               == other_config.stuff_divider
