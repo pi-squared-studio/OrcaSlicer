@@ -43,26 +43,35 @@ inline Vec2d rotate_point_CW(double angle, Vec2d p)
     return Vec2d(cs * p.x() - sn * p.y(), sn * p.x() + cs * p.y());
 };
 
+// Orca: The parameters that are taken into account when calculating a rotating infill.
+struct Infill_Params
+{
+    double angle   = 0.;
+    Vec2d  shift   = Vec2d(0, 0);
+    double density = -1;
+};
+
 // Calculate infill rotation angle (in radians) for a given layer from a rotation template.
 // Check the link for more info: https://www.orcaslicer.com/wiki/print_settings/strength/strength_settings_infill_rotation_template_metalanguage
-static std::pair<double, Point> calculate_infill_position(const PrintObject* object,
-                                                          size_t layer_id,
-                                                          const PrintRegionConfig& region_config,
-                                                          const double& fixed_infill_angle, // if template is used then it parameter must recieve model's direction
-                                                          const std::string& template_string)
+static Infill_Params calculate_infill_position(const PrintObject* object,
+                                               size_t layer_id,
+                                               const PrintRegionConfig& region_config,
+                                               const double& fixed_infill_angle, // if template is used then it parameter must recieve model's direction
+                                               const std::string& template_string,
+                                               const double& fixed_infill_density = 100.) // Get initial value from options
 {
-    Vec2d shift = Vec2d(0., 0.);
+    Infill_Params params;
     if (template_string.empty()) {
-        return std::pair<double, Vec2d> (Geometry::deg2rad(fixed_infill_angle), shift);
+        params.angle = fixed_infill_angle;
+        return params;
     }
     // Convert the id to an index. Layer::id() counts the raft layers, object->layers() does not.
     const size_t first_object_layer_id = object->get_layer(0)->id();
     layer_id                           = layer_id > first_object_layer_id ? layer_id - first_object_layer_id : 0;
-    double angle                       = 0.0;
-    const std::string search_string    = "^~/NnZz$LlUuQq#MDd"; // Attention: the first character in the string must be the ^ symbol, as it will later be escaped in the regex.
+    const std::string search_string    = "^~/NnZz$LlUuQq#MCc"; // Attention: the first character in the string must be the ^ symbol, as it will later be escaped in the regex.
     const std::string coord_string     = "XxYy";
     const std::string angle_string     = "A+-_0123456789.";
-    if (regex_search(template_string, std::regex("[+\\-%AXYxy_*@&\'\"cm\\" + search_string + "]"))) { // template metalanguage of rotating infill
+    if (regex_search(template_string, std::regex("[+\\-%AXYxyD_*@&\'\"cm\\" + search_string + "]"))) { // template metalanguage of rotating infill
         std::string template_string2 = std::regex_replace(template_string, std::regex("(^|[^1-9])0+([xX])"), "$1$2");
         std::regex del("[\\s,]+");
         std::sregex_token_iterator it(template_string2.begin(), template_string2.end(), del, -1);
@@ -78,6 +87,8 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
         double angle_start  = 0;
         Vec2d shift_add     = Vec2d(0., 0.);
         Vec2d shift_start   = Vec2d(0., 0.);
+        double density_add  = 0.;
+        double density_start = fixed_infill_density;
         double limit_fill_z = object->get_layer(0)->bottom_z();
         double start_fill_z = limit_fill_z;
         // The raft height, or 0 without a raft.
@@ -109,6 +120,8 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
                             angle_add   = 0.;
                             shift_start += shift_add;
                             shift_add   = Vec2d(0., 0.);
+                            density_start += density_add;
+                            density_add = 0.;
                             angle_steps = 1;
                             repeats     = 1;
                             if (tk[t].find('!') != std::string::npos) // this is an one-time instruction
@@ -118,6 +131,8 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
 
                             double angle_absolute(0.);
                             double angle_relative(0.);
+                            double density_absolute(0.);
+                            double density_relative(0.);
                             double shift_angle(0.);
                             Vec2d shift_absolute(0., 0.);
                             Vec2d shift_absolute2(0., 0.);
@@ -125,6 +140,7 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
                             Vec2d shift_relative2(0., 0.);
                             bool has_abs_angle = false;
                             bool has_abs_shift = false;
+                            bool has_abs_density = false;
                             for (;;) {
                                 bool is_abs_shift = false;
                                 char* shift_mark = cs;
@@ -200,6 +216,25 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
                                         else
                                             shift_relative2[1] += shift_value;
                                     }
+                                } else if (cs[0] == 'D') { // [D-zone]
+                                    cs++;
+                                    bool is_abs_density = is_absolute(cs); // absolute/relative
+                                    has_abs_density |= is_abs_density;
+                                    double density_value(strtod(cs, &cs)); // read density parameter
+
+                                    if (!density_value && (cs[0] == '+' || cs[0] == '-'))
+                                        cs++;
+
+                                    if (cs[0] == '%') // percentage of density
+                                        cs++;
+                                    else
+                                        density_value *= 100;
+
+                                    if (is_abs_density)
+                                        density_absolute += density_value;
+                                    else
+                                        density_relative += density_value;
+
                                 } else if (angle_string.find(cs[0]) != std::string::npos) { // [A-zone] 
                                     if (cs[0] == 'A') // Angle mark (Optional)
                                         cs++;
@@ -242,6 +277,11 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
                                 angle_start = angle_absolute;
                             
                             angle_add = angle_relative;
+
+                            if (has_abs_density) // is absolute
+                                density_start = density_absolute;
+
+                            density_add = density_relative;
 
                             double angle_complex(fixed_infill_angle + Geometry::deg2rad(angle_start));
                             if (has_abs_shift)
@@ -312,8 +352,9 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
                                 }
                                 if (angle_steps) { // if limit_fill_z does not setting by lenght method. Get count the layer id above model height
                                     if (fill_form == std::string::npos) {
-                                        angle_add *= (int) angle_steps;
-                                        shift_add *= (int) angle_steps;
+                                        angle_add   *= (int) angle_steps;
+                                        shift_add   *= (int) angle_steps;
+                                        density_add *= (int) angle_steps;
                                     }
                                     int idx      = i + std::max(angle_steps - 1, 0.);
                                     int sdx      = std::max(0, idx - (int) object->layers().size());
@@ -352,19 +393,23 @@ static std::pair<double, Point> calculate_infill_position(const PrintObject* obj
             case 13: negvalue  = pow(1. - negvalue, 3); break;                                     // q-joint, cubic, x3 inverse
             case 14: negvalue  = _negative ? 0. : 1.; break;                                       // #-joint, vertical at the end angle
             case 15: negvalue  = 0.5; break;                                                       // M-joint, like #-joint but placed at middle angle (former |-joint)
-            case 16: negvalue  = (_negative ? sin(negvalue * PI) : 1 - sin(negvalue * PI)); break; // D-joint, half of circle
-            case 17: negvalue  = (_negative ? .5 : -.5) * cos(negvalue * PI * 2.) + .5; break;     // d-joint, vertical cosine wave
+            case 16: negvalue  = (_negative ? sin(negvalue * PI) : 1 - sin(negvalue * PI)); break; // C-joint, half of circle
+            case 17: negvalue  = (_negative ? .5 : -.5) * cos(negvalue * PI * 2.) + .5; break;     // c-joint, vertical cosine wave
             }
-            angle = angle_start + angle_add * negvalue;
-            shift = shift_start + shift_add * negvalue;
+            params.angle = Geometry::deg2rad(angle_start + angle_add * negvalue);
+            params.shift = (shift_start + shift_add * negvalue) / SCALING_FACTOR;
+            params.density = density_start + density_add * negvalue;
         }
     } else {
         ConfigOptionFloats rotate_angles;
         rotate_angles.deserialize(template_string);
         auto rotate_angle_idx = layer_id % rotate_angles.size();
-        angle                 = rotate_angles.values[rotate_angle_idx];
+        params.angle          = Geometry::deg2rad(rotate_angles.values[rotate_angle_idx]);
     }
-    return std::pair<double, Point>(Geometry::deg2rad(angle), (shift / SCALING_FACTOR).cast<coord_t>());
+    // Make sure that the resulting density is within the range of 1% to 100%.
+    // Values outside this range will be produced within these limits.
+    params.density = std::min(std::max(params.density, 1.), 100.);
+    return params;
 };
 
 double calculate_infill_rotation_angle(const PrintObject* object,
@@ -373,7 +418,7 @@ double calculate_infill_rotation_angle(const PrintObject* object,
                                        const double& fixed_infill_angle,
                                        const std::string& template_string)
 {
-    return calculate_infill_position(object, layer_id, region_config, fixed_infill_angle, template_string).first;
+    return calculate_infill_position(object, layer_id, region_config, fixed_infill_angle, template_string).angle;
 }
 
 struct SurfaceFillParams
@@ -1132,14 +1177,16 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                 params.gyroid_optimized = (params.pattern == ipGyroid) && region_config.gyroid_optimized;
 
                 if (params.extrusion_role == erInternalInfill) {
-                    std::pair<double, Point> complex(calculate_infill_position(layer.object(), layer.id(), region_config,
+                    Infill_Params complex(calculate_infill_position(layer.object(), layer.id(), region_config,
                                                                                region_config.sparse_infill_rotate_template.value.empty() ?
                                                                                    region_config.infill_direction.value :
                                                                                    align_offset,
-                                                                               region_config.sparse_infill_rotate_template.value));
+                                                                               region_config.sparse_infill_rotate_template.value,
+                                                                               params.density));
 
-                    params.angle       = complex.first;
-                    params.shift       = complex.second;
+                    params.angle       = complex.angle;
+                    params.shift       = complex.shift.cast<coord_t>();
+                    params.density     = complex.density;
                     params.fixed_angle = !region_config.sparse_infill_rotate_template.value.empty();
 
                     // Orca: the smoothing factor only applies to the sparse infill patterns that
@@ -1153,14 +1200,14 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                         params.angle = Geometry::deg2rad(top_layer_direction_set ? region_config.top_layer_direction.value : region_config.bottom_layer_direction.value);
                         params.fixed_angle = true;
                     } else {
-                        std::pair<double, Point> complex(calculate_infill_position(layer.object(), layer.id(), region_config,
-                                                                                   region_config.solid_infill_rotate_template.value.empty() ?
-                                                                                       region_config.solid_infill_direction.value :
-                                                                                       align_offset,
-                                                                                   region_config.solid_infill_rotate_template.value));
+                        Infill_Params complex(calculate_infill_position(layer.object(), layer.id(), region_config,
+                                                                         region_config.solid_infill_rotate_template.value.empty() ?
+                                                                            region_config.solid_infill_direction.value :
+                                                                            align_offset,
+                                                                         region_config.solid_infill_rotate_template.value));
 
-                        params.angle = complex.first;
-                        params.shift = complex.second.cast<coord_t>();
+                        params.angle = complex.angle;
+                        params.shift = complex.shift.cast<coord_t>();
                         params.fixed_angle = !region_config.solid_infill_rotate_template.value.empty();
                     }
                 }
@@ -1358,13 +1405,14 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                     align_offset = atan2((float) m(1, 0), (float) m(0, 0));
                 }
 
-                std::pair<double, Point> complex(calculate_infill_position(layer.object(), layer.id(), region_config,
-                                                                           region_config.solid_infill_rotate_template.value.empty() ?
-                                                                               region_config.solid_infill_direction.value :
-                                                                               align_offset,
-                                                                           region_config.solid_infill_rotate_template.value));
-                params.angle       = complex.first;
-                params.shift       = complex.second.cast<coord_t>();
+                Infill_Params complex(calculate_infill_position(layer.object(), layer.id(), region_config,
+                                                                 region_config.solid_infill_rotate_template.value.empty() ?
+                                                                    region_config.solid_infill_direction.value :
+                                                                        align_offset,
+                                                                 region_config.solid_infill_rotate_template.value));
+                params.angle       = complex.angle;
+                params.shift       = complex.shift.cast<coord_t>();
+                params.density     = complex.density;
                 params.fixed_angle = !region_config.solid_infill_rotate_template.value.empty();
 
                 // calculate the actual flow we'll be using for this infill
