@@ -48,7 +48,7 @@ struct Infill_Params
 {
     double angle   = 0.;
     Vec2d  shift   = Vec2d(0, 0);
-    double density = -1;
+    double density = 100.;
 };
 
 // Calculate infill rotation angle (in radians) for a given layer from a rotation template.
@@ -61,6 +61,7 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                                                const double& fixed_infill_density = 100.) // Get initial value from options
 {
     Infill_Params params;
+    params.density = fixed_infill_density;
     if (template_string.empty()) {
         params.angle = fixed_infill_angle;
         return params;
@@ -1412,7 +1413,6 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                                                                  region_config.solid_infill_rotate_template.value));
                 params.angle       = complex.angle;
                 params.shift       = complex.shift.cast<coord_t>();
-                params.density     = complex.density;
                 params.fixed_angle = !region_config.solid_infill_rotate_template.value.empty();
 
                 // calculate the actual flow we'll be using for this infill
