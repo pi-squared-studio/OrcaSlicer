@@ -63,7 +63,7 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
     Infill_Params params;
     params.density = fixed_infill_density;
     if (template_string.empty()) {
-        params.angle = fixed_infill_angle;
+        params.angle = Geometry::deg2rad(fixed_infill_angle);
         return params;
     }
     // Convert the id to an index. Layer::id() counts the raft layers, object->layers() does not.
@@ -1599,6 +1599,10 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
                                   is_separable_infill_pattern(surface_fill.params.pattern) ||
                                   params.config->solid_infill_rotate_template != "" ||
                                   params.config->sparse_infill_rotate_template != "" );
+
+        // Orca: dont alternate if rotation template is used
+        f->dont_alternate_fill_direction |= (surface_fill.surface.surface_type == stInternal && params.config->sparse_infill_rotate_template != "") || 
+                                            (surface_fill.surface.surface_type == stInternalSolid && params.config->solid_infill_rotate_template != "");
 
         if( surface_fill.params.pattern == ipLockedZag ) {
 			params.locked_zag = true;
