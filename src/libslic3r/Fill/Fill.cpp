@@ -73,7 +73,9 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
     const std::string coord_string     = "XxYy";
     const std::string angle_string     = "A+-_0123456789.";
     if (regex_search(template_string, std::regex("[+\\-%AXYxyD_*@&\'\"cm\\" + search_string + "]"))) { // template metalanguage of rotating infill
-        std::string template_string2 = std::regex_replace(template_string, std::regex("(^|[^1-9])0+([xX])"), "$1$2");
+        // Check for the "0X" character combination, which may be interpreted incorrectly by the strtod() function. 
+        // Replace it with "X". The cases like "10X" not replaced.
+        std::string template_string2 = std::regex_replace(template_string, std::regex("(^|\\D)0+([xX])"), "$1$2");
         std::regex del("[\\s,]+");
         std::sregex_token_iterator it(template_string2.begin(), template_string2.end(), del, -1);
         std::vector<std::string> tk;
@@ -94,10 +96,12 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
         double start_fill_z = limit_fill_z;
         // The raft height, or 0 without a raft.
         const double print_z_offset = object->slicing_parameters().object_print_z_min;
-        bool _noop          = false;
         auto fill_form      = std::string::npos;
         bool _negative      = false;
-        std::vector<bool> stop(tk.size(), false);
+        bool loop_fuse      = true;
+        // Vector of stop marks. "1" is the one-time running command, "2" is the dumb command
+        // If the all values entire vector is unequal to 0, then stop the parsing from repeating.
+        std::vector<int> stop(tk.size(), 0);
 
         for (int i = 0; i <= layer_id; i++) {
             double fill_z = object->get_layer(i)->bottom_z();
@@ -114,8 +118,7 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                     // Solid handling removed: this function only computes rotation.
                     fill_form    = std::string::npos;
                     do {
-                        if (!stop[t]) {
-                            _noop       = false;
+                        if (stop[t] < 2) { // validate only dumb commands
                             _negative   = false;
                             angle_start += angle_add;
                             angle_add   = 0.;
@@ -125,8 +128,8 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                             density_add = 0.;
                             angle_steps = 1;
                             repeats     = 1;
-                            if (tk[t].find('!') != std::string::npos) // this is an one-time instruction
-                                stop[t] = true;
+                            if (tk[t].find('!') != std::string::npos)
+                                stop[t] = 2; // this is an one-time running command
 
                             char* cs = &tk[t][0];
 
@@ -307,7 +310,6 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                             int tit = tk[t].find('*');
                             if (tit != std::string::npos) // overall angle_cycles
                                 repeats = strtol(&tk[t][tit + 1], &cs, 0);
-
                             if (repeats) { // run if overall cycles greater than 0
                                 if (cs[0] == 'B') {
                                     angle_steps = object->print()->default_region_config().bottom_shell_layers.value;
@@ -363,15 +365,12 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                                     limit_fill_z = object->get_layer(idx)->print_z + sdx * object->config().layer_height;
                                 }
                                 repeats = std::max(repeats - 1, 0);
-                            } else {
-                                _noop = true; // set the dumb cycle
-                            }
+                            } else
+                                stop[t] = 1; // set stop mark on the dumb command
                         }
                         if (++t >= tk.size())
                             t = 0;
-                    } while (std::all_of(stop.begin(), stop.end(), [](bool v) { return v; }) ?
-                                 false :
-                                 (t ? _noop : false) || stop[t]); // if this is a dumb instruction which never reaprated twice
+                    } while (stop[t] && std::any_of(stop.begin(), stop.end(), [](int v) { return v == 0; })); // if this is a set of dumb or one-time running instruction which never reaprated twice
                 }
             }
             double top_z    = object->get_layer(i)->print_z;
