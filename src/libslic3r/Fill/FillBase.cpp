@@ -318,8 +318,7 @@ std::pair<float, Point> Fill::_infill_direction(const Surface *surface) const
     } else {
 //    	printf("Layer_ID undefined!\n");
     }
-    if (!this->is_templated)
-        out_angle += float(M_PI/2.);
+    out_angle += float(M_PI/2.);
     return std::pair<float, Point>(out_angle, out_shift);
 }
 

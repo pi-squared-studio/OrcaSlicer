@@ -74,7 +74,8 @@ void FillPlanePath::_fill_surface_single(
     ExPolygon                        expolygon,
     Polylines                       &polylines_out)
 {
-    expolygon.rotate(-direction.first);
+    double angle = is_templated ? this->angle : -direction.first;
+    expolygon.rotate(-angle);
 
     //FIXME Vojtech: We are not sure whether the user expects the fill patterns on visible surfaces to be aligned across all the islands of a single layer.
     // One may align for this->centered() to align the patterns for Archimedean Chords and Octagram Spiral patterns.
@@ -86,7 +87,7 @@ void FillPlanePath::_fill_surface_single(
     if (is_internal) { // Internal infill
         bounding_box = this->bounding_box;
         bounding_box.translate(this->shift);
-        bounding_box.rotate(-direction.first);
+        bounding_box.rotate(-angle);
         // Expand the bounding box to avoid artifacts at the edges
         bounding_box.offset(this->shift.norm());
     } else if (params.center_of_surface_pattern == CenterOfSurfacePattern::Each_Surface) {
@@ -95,7 +96,7 @@ void FillPlanePath::_fill_surface_single(
         bounding_box.offset(scale_(this->spacing) * params.multiline);
     }
     else if (params.center_of_surface_pattern == CenterOfSurfacePattern::Each_Model)
-        bounding_box = this->bounding_box.rotated(-direction.first);
+        bounding_box = this->bounding_box.rotated(-angle);
     else
         bounding_box = extended_object_bounding_box();
 
@@ -184,8 +185,7 @@ void FillPlanePath::_fill_surface_single(
             // paths must be repositioned and rotated back
             for (Polyline& pl : chained) {
                 pl.translate(shift.x(), shift.y());
-                pl.rotate(direction.first);
-                //pl.translate(direction.second);
+                pl.rotate(angle);
             }
             append(polylines_out, std::move(chained));
         }
