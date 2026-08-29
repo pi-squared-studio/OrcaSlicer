@@ -71,8 +71,9 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
     layer_id                           = layer_id > first_object_layer_id ? layer_id - first_object_layer_id : 0;
     const std::string search_string    = "^~/NnZz$LlUuQq#MCc"; // Attention: the first character in the string must be the ^ symbol, as it will later be escaped in the regex.
     const std::string coord_string     = "XxYy";
+    const std::string density_string   = "Dd";
     const std::string angle_string     = "A+-_0123456789.";
-    if (regex_search(template_string, std::regex("[+\\-%AXYxyD_*@&\'\"cm\\" + search_string + "]"))) { // template metalanguage of rotating infill
+    if (regex_search(template_string, std::regex("[+\\-%AXYxyDd_*@&\'\"cm\\" + search_string + "]"))) { // template metalanguage of rotating infill
         // Check for the "0X" character combination, which may be interpreted incorrectly by the strtod() function. 
         // Replace it with "X". The cases like "10X" not replaced.
         std::string template_string2 = std::regex_replace(template_string, std::regex("(^|\\D)0+([xX])"), "$1$2");
@@ -92,6 +93,7 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
         Vec2d shift_start   = Vec2d(0., 0.);
         double density_add  = 0.;
         double density_start = fixed_infill_density;
+        double density_linear = 0.;
         double limit_fill_z = object->get_layer(0)->bottom_z();
         double start_fill_z = limit_fill_z;
         // The raft height, or 0 without a raft.
@@ -125,6 +127,7 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                             shift_start += shift_add;
                             shift_add   = Vec2d(0., 0.);
                             density_start += density_add;
+                            density_linear = 0.;
                             density_add = 0.;
                             angle_steps = 1;
                             repeats     = 1;
@@ -147,7 +150,7 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                             bool has_abs_density = false;
                             for (;;) {
                                 bool is_abs_shift = false;
-                                char* shift_mark = cs;
+                                char* zone_mark = cs;
                                 double shift_value(0.);
 
                                 if (coord_string.find(cs[0]) != std::string::npos) { // [XxYy-zone]
@@ -199,45 +202,61 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                                             shift_value *= 1000.;
                                     }
 
-                                    if (shift_mark[0] == 'X') { // get X shift
+                                    if (zone_mark[0] == 'X') { // get X shift
                                         if (is_abs_shift)
                                             shift_absolute[0] += shift_value;
                                         else
                                             shift_relative[0] += shift_value;
-                                    } else if (shift_mark[0] == 'Y') { // get Y shift
+                                    } else if (zone_mark[0] == 'Y') { // get Y shift
                                         if (is_abs_shift)
                                             shift_absolute[1] += shift_value;
                                         else
                                             shift_relative[1] += shift_value;
-                                    } else if (shift_mark[0] == 'x') { // get relative X shift
+                                    } else if (zone_mark[0] == 'x') { // get relative X shift
                                         if (is_abs_shift)
                                             shift_absolute2[0] += shift_value;
                                         else
                                             shift_relative2[0] += shift_value;
-                                    } else if (shift_mark[0] == 'y') { // get relative Y shift
+                                    } else if (zone_mark[0] == 'y') { // get relative Y shift
                                         if (is_abs_shift)
                                             shift_absolute2[1] += shift_value;
                                         else
                                             shift_relative2[1] += shift_value;
                                     }
-                                } else if (cs[0] == 'D') { // [D-zone]
+                                } else if (density_string.find(cs[0]) != std::string::npos) { // [D-zone] 
                                     cs++;
                                     bool is_abs_density = is_absolute(cs); // absolute/relative
                                     has_abs_density |= is_abs_density;
                                     double density_value(strtod(cs, &cs)); // read density parameter
 
+                                    if (cs[0] == '%') { // percentage of density
+                                        cs++;
+                                        density_value *= .01;
+                                    } else if (cs[0] == ':') { // fractional
+                                        if (density_value == 0.)
+                                            density_value = 1.;
+                                        cs++;
+                                        double density_frac = strtod(cs, &cs);
+                                        if (density_value == 0.)
+                                            density_value = 1.;
+                                        density_value /= density_frac;
+                                    }
+
+                                    if (zone_mark[0] == 'd' && is_abs_density)
+                                       density_value = (density_value < 0 ? - 1 : 1) * sqrt(abs(density_value));
+
                                     if (!density_value && (cs[0] == '+' || cs[0] == '-'))
                                         cs++;
 
-                                    if (cs[0] == '%') // percentage of density
-                                        cs++;
-                                    else
-                                        density_value *= 100;
+                                    density_value *= 100; // normalize value
 
                                     if (is_abs_density)
                                         density_absolute += density_value;
                                     else
-                                        density_relative += density_value;
+                                        if (zone_mark[0] == 'd')
+                                            density_linear += density_value;
+                                        else
+                                            density_relative += density_value;
 
                                 } else if (angle_string.find(cs[0]) != std::string::npos) { // [A-zone] 
                                     if (cs[0] == 'A') // Angle mark (Optional)
@@ -355,9 +374,10 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                                 }
                                 if (angle_steps) { // if limit_fill_z does not setting by lenght method. Get count the layer id above model height
                                     if (fill_form == std::string::npos) {
-                                        angle_add   *= (int) angle_steps;
-                                        shift_add   *= (int) angle_steps;
-                                        density_add *= (int) angle_steps;
+                                        angle_add      *= (int) angle_steps;
+                                        shift_add      *= (int) angle_steps;
+                                        density_add    *= (int) angle_steps;
+                                        density_linear *= (int) angle_steps;
                                     }
                                     int idx      = i + std::max(angle_steps - 1, 0.);
                                     int sdx      = std::max(0, idx - (int) object->layers().size());
@@ -398,7 +418,12 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
             }
             params.angle = Geometry::deg2rad(angle_start + angle_add * negvalue);
             params.shift = (shift_start + shift_add * negvalue) / SCALING_FACTOR;
-            params.density = density_start + density_add * negvalue;
+            if (density_linear) {
+                double _ns     = 1. / density_start;
+                double _ne     = 1. / (density_start + density_linear);
+                params.density = 1. / (_ns - (_ns - _ne) * negvalue) + density_add * negvalue;
+            } else 
+                params.density = density_start + density_add * negvalue;
         }
     } else {
         ConfigOptionFloats rotate_angles;
@@ -1600,8 +1625,8 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
                                   params.config->sparse_infill_rotate_template != "" );
 
         // Orca: dont alternate if rotation template is used
-        f->dont_alternate_fill_direction |= (surface_fill.surface.surface_type == stInternal && params.config->sparse_infill_rotate_template != "") || 
-                                            (surface_fill.surface.surface_type == stInternalSolid && params.config->solid_infill_rotate_template != "");
+        f->is_templated = (surface_fill.surface.surface_type == stInternal && params.config->sparse_infill_rotate_template != "") || 
+                          (surface_fill.surface.surface_type == stInternalSolid && params.config->solid_infill_rotate_template != "");
 
         if( surface_fill.params.pattern == ipLockedZag ) {
 			params.locked_zag = true;
