@@ -100,7 +100,7 @@ void FillPlanePath::_fill_surface_single(
     else
         bounding_box = extended_object_bounding_box();
 
-    Point shift = this->centered() ? 
+    Point shift = (this->centered() || is_templated) ? 
         bounding_box.center() : bounding_box.min - this->shift; // Need to fix - the hilbert pattern rotates around its own center
     expolygon.translate(-shift.x(), -shift.y());
     bounding_box.translate(-shift.x(), -shift.y());
