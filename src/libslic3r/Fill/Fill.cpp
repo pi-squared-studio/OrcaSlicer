@@ -80,16 +80,21 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
         std::string template_string2 = std::regex_replace(template_string, std::regex("(^|\\D)0+([xX])"), "$1$2");
         std::regex del("[\\s,]+");
         std::sregex_token_iterator it(template_string2.begin(), template_string2.end(), del, -1);
-        std::vector<std::string> tk;
+        std::vector<std::string> tk;                // metacommands array
         std::sregex_token_iterator end;
         while (it != end) {
             tk.push_back(*it++);
         }
-        int    t               = 0;                 // metacommand pointer
-        int    repeats         = 0;                 // metacommand repeats counter
+        int    t               = tk.size();         // metacommand index
+        int    repeats         = 1;                 // metacommand repeats counter
         double divider_steps   = 1;                 // the number of steps of the divisor
         double angle_start     = 0.;                // the initial position of the angle for the current range
+        //double angle_finish    = 0.;                // the finish position of the angle for the current range
+        //int    has_abs_angle   = 0;                 // has set of absolute angle position: 0 - don't, 1 - start, >1 - finish
+        //int    has_rel_angle   = 0;                 // has set of relative angle position: 0 - don't, 1 - start, >1 - finish
         double angle_add       = 0;                 // additive for the angle step
+        //double angle_extra     = 0;                 // the finish additive angle
+
         Vec2d  shift_add       = Vec2d(0., 0.);     // the initial position of the shift for the current range
         Vec2d  shift_start     = Vec2d(0., 0.);     // additive for the shift step
         double density_start   = (fixed_infill_density / fixed_multiline) / 100.; // the initial position of the density in internal scale 0...1 without multiline factor
@@ -98,8 +103,9 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
         int    density_adapt   = 0;                 // flag for restoring the normal density representation when miltiline changing
         double multiline_start = fixed_multiline;   // the initial position of the miltiline for the current range
         double multiline_add   = 0.;                // additive for the miltiline step
-        double limit_fill_z    = object->get_layer(0)->bottom_z();
-        double start_fill_z    = limit_fill_z;
+        
+        double limit_fill_z    = object->get_layer(0)->print_z;
+        double start_fill_z = object->get_layer(0)->slice_z;
         // The raft height, or 0 without a raft.
         const double print_z_offset = object->slicing_parameters().object_print_z_min;
         auto fill_form      = std::string::npos;
@@ -109,47 +115,57 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
         std::vector<int> stop(tk.size(), 0);
 
         for (int i = 0; i <= layer_id; i++) {
-            double fill_z = object->get_layer(i)->bottom_z();
+            double fill_z = object->get_layer(i)->slice_z;
             
             // slice_z is measured from the bottom of the model, limit_fill_z from the build plate.
-            if (limit_fill_z < object->get_layer(i)->slice_z + print_z_offset) {
-                if (repeats) { // if repeats >0 then restore parameters for new iteration
-                    limit_fill_z += limit_fill_z - start_fill_z;
-                    start_fill_z = fill_z;
-                    repeats--;
+            if (limit_fill_z <= object->get_layer(i)->print_z + print_z_offset) {
+
+                if (repeats-- > 0) { // if repeats >0 then restore parameters for new iteration
+                    double next_fill_z = limit_fill_z - start_fill_z;
+                    start_fill_z       = limit_fill_z;
+                    limit_fill_z += next_fill_z;
                 } else {
-                    start_fill_z = fill_z;
-                    limit_fill_z = object->get_layer(i)->print_z;
-                    // Solid handling removed: this function only computes rotation.
-                    fill_form     = std::string::npos;
-                    density_adapt = 0;
+                    start_fill_z = limit_fill_z;
+                    fill_form    = std::string::npos;
+
                     do {
+                        if (++t >= tk.size()) // reset index
+                            t = 0;
+                        
                         if (stop[t] < 2) { // validate only dumb commands
                             _negative   = false;
+
                             angle_start += angle_add;
                             angle_add   = 0.;
+                            
                             shift_start += shift_add;
                             shift_add   = Vec2d(0., 0.);
+                            
                             density_start += density_add;
                             density_lin = 0.;
                             density_add = 0.;
+                            density_adapt = 0;
+                            
                             multiline_start += multiline_add;
                             multiline_add  = 0.;
+                            
                             divider_steps = 1;
                             repeats     = 1;
-                            if (tk[t].find('!') != std::string::npos)
-                                stop[t] = 2;                // this is an one-time running command
 
-                            char* cs = &tk[t][0];           // current metacommand
+                            if (tk[t].find('!') != std::string::npos) // [R-zone] one-time running command
+                                stop[t] = 2;
 
-                            double angle_abs(0.);           // absolute angle position accumulator
-                            double angle_rel(0.);           // relative turn change accumulator
-                            bool has_abs_angle = false;     // has set of absolute angle position
-                            Vec2d shift_abs(0., 0.);        // absolute XY-position accumulator
-                            Vec2d shift_abs2(0., 0.);       // absolute XY-position accumulator for infill vector
-                            Vec2d shift_rel(0., 0.);        // relative shift accumulator
-                            Vec2d shift_rel2(0., 0.);       // relative shift accumulator for infill vector
-                            bool has_abs_shift = false;     // has set of absolute XY-position
+                            char* cs = &tk[t][0];                 // current metacommand
+
+                            Vec2d shift_abs(0., 0.);              // absolute XY-position accumulator
+                            Vec2d shift_abs2(0., 0.);             // absolute XY-position accumulator for infill vector
+                            Vec2d shift_rel(0., 0.);              // relative shift accumulator
+                            Vec2d shift_rel2(0., 0.);             // relative shift accumulator for infill vector
+                            bool has_abs_shift = false;           // has set of absolute XY-position
+                            double density_finish = 0.;           // the finish position of the density for the current range
+                            bool has_finish_density = false;      // has set of absolute density position
+                            double multiline_finish   = 0.;       // the finish position of the multiline for the current range
+                            bool has_multiline_density = false;   // has set of multiline angle position
 
                             for (;;) {
                                 bool is_abs_shift = false;
@@ -159,7 +175,7 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                                 if (coord_string.find(cs[0]) != std::string::npos) { // [XxYy-zone]
                                     cs++;
                                     if (is_abs_shift = is_absolute(cs)) // absolute/relative
-                                        has_abs_shift = true;
+                                        has_abs_shift |= true;
 
                                     if (cs[0] == '_') { // get value
                                         cs++;
@@ -284,7 +300,7 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                                     
                                     double angle_value(0);
                                     bool is_abs_angle = is_absolute(cs); // absolute/relative
-                                    has_abs_angle |= is_abs_angle;
+
                                     if (cs[0] == '_') { // negative shift
                                         cs++;
                                         angle_value = -strtod(cs, &cs); // read negative absolute angle parameter
@@ -309,108 +325,121 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                                         cs++;
                                     }
                                     if (is_abs_angle)
-                                        angle_abs += angle_value;
+                                        angle_start = angle_value;
                                     else
-                                        angle_rel += angle_value;
+                                        angle_add += angle_value;
+
                                 } else
                                     break;
                             }
 
-                            if (has_abs_angle) // is absolute
-                                angle_start = angle_abs;
-                            
-                            angle_add = angle_rel;
-
+                            // [XY-zone] final processing
                             double angle_complex(fixed_infill_angle + Geometry::deg2rad(angle_start));
-                            if (has_abs_shift)
-                                if (!shift_abs.isZero())
+                            if (has_abs_shift) // the absolute value has changed
+                                if (!shift_abs.isZero()) {
                                     if (!shift_abs2.isZero())
-                                        shift_start = rotate_point_CW(fixed_infill_angle, shift_abs) +
-                                                      rotate_point_CW(angle_complex, shift_abs2);
+                                        shift_start = rotate_point_CW(fixed_infill_angle, shift_abs) + rotate_point_CW(angle_complex, shift_abs2);
                                     else
                                         shift_start = rotate_point_CW(fixed_infill_angle, shift_abs);
-                                else if (!shift_abs2.isZero())
+                                } else if (!shift_abs2.isZero())
                                     shift_start = rotate_point_CW(angle_complex, shift_abs2);
 
-                            if (!shift_rel.isZero())
+                            if (!shift_rel.isZero()) {
                                 if (!shift_rel2.isZero())
-                                    shift_add = rotate_point_CW(fixed_infill_angle, shift_rel) +
-                                                rotate_point_CW(angle_complex, shift_rel2);
+                                    shift_add = rotate_point_CW(fixed_infill_angle, shift_rel) + rotate_point_CW(angle_complex, shift_rel2);
                                 else
                                     shift_add = rotate_point_CW(fixed_infill_angle, shift_rel);
-                            else if (!shift_rel2.isZero())
+                            } else if (!shift_rel2.isZero())
                                 shift_add = rotate_point_CW(angle_complex, shift_rel2);
 
-                            int tit = tk[t].find('*');
-                            if (tit != std::string::npos) // overall angle_cycles
-                                repeats = strtol(&tk[t][tit + 1], &cs, 0);
-                            if (repeats) { // run if overall cycles greater than 0
-                                if (cs[0] == 'B') {
-                                    divider_steps = object->print()->default_region_config().bottom_shell_layers.value;
-                                } else if (cs[0] == 'T') {
-                                    divider_steps = object->print()->default_region_config().top_shell_layers.value;
-                                } else {
-                                    fill_form = search_string.find(cs[0]);
-                                    if (fill_form != std::string::npos)
-                                        cs++;
+                            if (cs[0] == '*') { // [R-zone] overall cycles - pre [Z-zone]
+                                cs++;
+                                repeats = strtol(cs, &cs, 0);
+                            }
 
-                                    _negative   = (cs[0] == '-'); // negative parameter
-                                    divider_steps = abs(strtod(cs, &cs));
-                                    if (cs[0] == ':') { // fractional
-                                        if (divider_steps == 0.)
-                                            divider_steps = 1.;
+                            if (cs[0] == 'B') {
+                                divider_steps = object->print()->default_region_config().bottom_shell_layers.value;
+                                cs++;
+                            } else if (cs[0] == 'T') {
+                                divider_steps = object->print()->default_region_config().top_shell_layers.value;
+                                cs++;
+                            } else {
+                                fill_form = search_string.find(cs[0]);
+                                if (fill_form != std::string::npos)
+                                    cs++;
+                                _negative = (cs[0] == '-'); // negative parameter
+                                divider_steps = abs(strtod(cs, &cs));
+                                if (cs[0] == ':') { // fractional
+                                    if (divider_steps == 0.)
+                                        divider_steps = 1.;
+                                    cs++;
+                                    double angle_frac = strtod(cs, &cs);
+                                    if (angle_frac == 0.)
+                                        angle_frac = 1.;
+                                    divider_steps /= angle_frac;
+                                }
+                                if (divider_steps && cs[0] != '\0' && cs[0] != '!') {
+                                    if (cs[0] == '%') { // value in the percents of fill_z
+                                        limit_fill_z = (divider_steps * object->height() + object->get_layer(0)->height / 2) * 1e-8;
                                         cs++;
-                                        double angle_frac = strtod(cs, &cs);
-                                        if (angle_frac == 0.)
-                                            angle_frac = 1.;
-                                        divider_steps /= angle_frac;
-                                    }
-                                    if (divider_steps && cs[0] != '\0' && cs[0] != '!') {
-                                        if (cs[0] == '%') // value in the percents of fill_z
-                                            limit_fill_z = divider_steps * object->height() * 1e-8;
-                                        else if (cs[0] == '#') // value in the feet
-                                            limit_fill_z = divider_steps * object->config().layer_height;
-                                        else if (cs[0] == '\'') // value in the feet
-                                            limit_fill_z = divider_steps * 12 * 25.4;
-                                        else if (cs[0] == '\"') // value in the inches
-                                            limit_fill_z = divider_steps * 25.4;
-                                        else if (cs[0] == 'c') // value in centimeters
-                                            limit_fill_z = divider_steps * 10.;
-                                        else if (cs[0] == 'm') {
-                                            if (cs[1] == 'm') { // value in the millimeters
-                                                limit_fill_z = divider_steps * 1.;
-                                            } else {
-                                                limit_fill_z = divider_steps * 1000.;
-                                            }
+                                    } else if (cs[0] == '#') { // value in the feet
+                                        limit_fill_z = divider_steps * object->config().layer_height;
+                                        cs++;
+                                    } else if (cs[0] == '\'') { // value in the feet
+                                        limit_fill_z = divider_steps * 12 * 25.4;
+                                        cs++;
+                                    } else if (cs[0] == '\"') { // value in the inches
+                                        limit_fill_z = divider_steps * 25.4;
+                                        cs++;
+                                    } else if (cs[0] == 'c') { // value in centimeters
+                                        limit_fill_z = divider_steps * 10.;
+                                        cs++;
+                                        if (cs[0] == 'm') // finish centimeters
+                                            cs++;
+                                    } else if (cs[0] == 'm') {
+                                        cs++;
+                                        if (cs[0] == 'm') { // value in the millimeters
+                                            limit_fill_z = divider_steps * 1.;
+                                            cs++;
+                                        } else {
+                                            limit_fill_z = divider_steps * 1000.;
                                         }
-                                        limit_fill_z += fill_z;
-                                        divider_steps = 0; // limit_fill_z has already count
                                     }
+                                    limit_fill_z += fill_z;
+                                    divider_steps = 0; // limit_fill_z has already count
                                 }
-                                if (divider_steps) { // if limit_fill_z does not setting by lenght method. Get count the layer id above model height
-                                    if (fill_form == std::string::npos) {
-                                        angle_add      *= divider_steps;
-                                        shift_add      *= divider_steps;
-                                        density_add    *= divider_steps;
-                                        density_lin    *= divider_steps;
-                                        multiline_add  *= divider_steps;
-                                    }
-                                    int idx      = i + std::max(divider_steps - 1, 0.);
-                                    int sdx      = std::max(0, idx - (int) object->layers().size());
-                                    idx          = std::min(idx, (int) object->layers().size() - 1);
-                                    limit_fill_z = object->get_layer(idx)->print_z + sdx * object->config().layer_height;
+                            }
+                            if (divider_steps) { // if limit_fill_z does not setting by lenght method. Get count the layer id above model height
+                                if (fill_form == std::string::npos) {
+                                    divider_steps = floor(divider_steps);
+                                    angle_add      *= divider_steps;
+                                    shift_add      *= divider_steps;
+                                    density_add    *= divider_steps;
+                                    density_lin    *= divider_steps;
+                                    multiline_add  *= divider_steps;
                                 }
-                                repeats = std::max(repeats - 1, 0);
+                                int idx      = i + std::max(divider_steps - 1, 0.);
+                                int sdx      = std::max(0, idx - (int) object->layers().size());
+                                idx          = std::min(idx, (int) object->layers().size() - 1);
+                                limit_fill_z = object->get_layer(idx)->print_z + sdx * object->config().layer_height;
+                            }
+
+                            if (cs[0] == '*') { // [R-zone] overall cycles - post [Z-zone]
+                                cs++;
+                                repeats = strtol(cs, &cs, 0);
+                            }
+
+                            if (!repeats) {                  // if overall cycles = 0
+                                stop[t]      = 1;            // set stop mark on the dumb command
+                                limit_fill_z = start_fill_z; // disable guard range
                             } else
-                                stop[t] = 1; // set stop mark on the dumb command
+                                repeats--;                   // reduce one step because it has already been completed
                         }
-                        if (++t >= tk.size())
-                            t = 0;
                     } while (stop[t] && std::any_of(stop.begin(), stop.end(), [](int v) { return v == 0; })); // if this is a set of dumb or one-time running instruction which never reaprated twice
                 }
             }
-            double top_z    = object->get_layer(i)->print_z;
-            double negvalue = (_negative ? limit_fill_z - top_z : top_z - start_fill_z) / (limit_fill_z - start_fill_z);
+
+            double negvalue = std::min(std::max((_negative ? (limit_fill_z - fill_z) : (fill_z - start_fill_z)) / (limit_fill_z - start_fill_z), 0.), 1.);
 
             switch (fill_form) {
             case 0:  negvalue += (double) rand() / RAND_MAX - .5; break;                           // ^-joint, pseudorandom, disperse at middle line
@@ -429,9 +458,11 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
             case 13: negvalue  = pow(1. - negvalue, 3); break;                                     // q-joint, cubic, x3 inverse
             case 14: negvalue  = _negative ? 0. : 1.; break;                                       // #-joint, vertical at the end angle
             case 15: negvalue  = 0.5; break;                                                       // M-joint, like #-joint but placed at middle angle (former |-joint)
-            case 16: negvalue  = (_negative ? 1 - sin(negvalue * PI) : sin(negvalue * PI)); break; // C-joint, half of circle
+            case 16: negvalue  = _negative ? 1 - sqrt(1 - pow(negvalue * 2 - 1, 2)) : 
+                                             sqrt(1 - pow(negvalue * 2 - 1, 2)); break;            // C-joint, half of circle // (_negative ? 1 - sin(negvalue * PI) : sin(negvalue * PI))
             case 17: negvalue  = (_negative ? -.5 : .5) * cos(negvalue * PI * 2.) + .5; break;     // c-joint, vertical cosine wave
             }
+
             params.angle = Geometry::deg2rad(angle_start + angle_add * negvalue);
             params.shift = (shift_start + shift_add * negvalue) / SCALING_FACTOR;
             if (density_lin) {
@@ -448,7 +479,6 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                 params.density *= round(multiline_start) / multiline_param;
             else if (density_adapt) // == 2
                 params.density /= multiline_start;
-
         }
     } else {
         ConfigOptionFloats rotate_angles;
