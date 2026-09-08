@@ -86,14 +86,10 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
             tk.push_back(*it++);
         }
         int    t               = tk.size();         // metacommand index
-        int    repeats         = 1;                 // metacommand repeats counter
+        int    repeats         = 0;                 // metacommand repeats counter
         double divider_steps   = 1;                 // the number of steps of the divisor
         double angle_start     = 0.;                // the initial position of the angle for the current range
-        //double angle_finish    = 0.;                // the finish position of the angle for the current range
-        //int    has_abs_angle   = 0;                 // has set of absolute angle position: 0 - don't, 1 - start, >1 - finish
-        //int    has_rel_angle   = 0;                 // has set of relative angle position: 0 - don't, 1 - start, >1 - finish
         double angle_add       = 0;                 // additive for the angle step
-        //double angle_extra     = 0;                 // the finish additive angle
 
         Vec2d  shift_add       = Vec2d(0., 0.);     // the initial position of the shift for the current range
         Vec2d  shift_start     = Vec2d(0., 0.);     // additive for the shift step
@@ -127,12 +123,13 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                 } else {
                     start_fill_z = limit_fill_z;
                     fill_form    = std::string::npos;
-
+                    
+                    bool is_dumb = false; // dumb metacommand flag
                     do {
-                        if (++t >= tk.size()) // reset index
+                        if (t >= tk.size()) // reset index
                             t = 0;
-                        
-                        if (stop[t] < 2) { // validate only dumb commands
+
+                        if (stop[t] < 2) {  // validate only dumb commands
                             _negative   = false;
 
                             angle_start += angle_add;
@@ -142,15 +139,15 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                             shift_add   = Vec2d(0., 0.);
                             
                             density_start += density_add;
-                            density_lin = 0.;
-                            density_add = 0.;
+                            density_lin   = 0.;
+                            density_add   = 0.;
                             density_adapt = 0;
                             
                             multiline_start += multiline_add;
                             multiline_add  = 0.;
                             
                             divider_steps = 1;
-                            repeats     = 1;
+                            repeats       = 1;
 
                             if (tk[t].find('!') != std::string::npos) // [R-zone] one-time running command
                                 stop[t] = 2;
@@ -162,15 +159,12 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                             Vec2d shift_rel(0., 0.);              // relative shift accumulator
                             Vec2d shift_rel2(0., 0.);             // relative shift accumulator for infill vector
                             bool has_abs_shift = false;           // has set of absolute XY-position
-                            double density_finish = 0.;           // the finish position of the density for the current range
-                            bool has_finish_density = false;      // has set of absolute density position
-                            double multiline_finish   = 0.;       // the finish position of the multiline for the current range
-                            bool has_multiline_density = false;   // has set of multiline angle position
 
                             for (;;) {
                                 bool is_abs_shift = false;
                                 char* zone_mark = cs;
                                 double shift_value(0.);
+                                is_dumb = false;
 
                                 if (coord_string.find(cs[0]) != std::string::npos) { // [XxYy-zone]
                                     cs++;
@@ -431,11 +425,13 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
 
                             if (!repeats) {                  // if overall cycles = 0
                                 stop[t]      = 1;            // set stop mark on the dumb command
+                                is_dumb      = true;
                                 limit_fill_z = start_fill_z; // disable guard range
                             } else
-                                repeats--;                   // reduce one step because it has already been completed
+                                repeats--; // reduce one step because it has already been completed
                         }
-                    } while (stop[t] && std::any_of(stop.begin(), stop.end(), [](int v) { return v == 0; })); // if this is a set of dumb or one-time running instruction which never reaprated twice
+                        t++;
+                    } while (is_dumb && ((t < tk.size()) || std::any_of(stop.begin(), stop.end(), [](int v) { return v == 0; }))); // if this is a set of dumb or one-time running instruction which never reaprated twice
                 }
             }
 
@@ -480,16 +476,16 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
             else if (density_adapt) // == 2
                 params.density /= multiline_start;
         }
+        // Make sure that the resulting density is within the range of EPSILON to 100%.
+        // Values outside this range will be produced within these limits.
+        // params.multiline = std::min(params.multiline, 10); // limit multiline
+        params.density   = std::min(std::max(params.density * params.multiline * 100., EPSILON), 100.);
     } else {
         ConfigOptionFloats rotate_angles;
         rotate_angles.deserialize(template_string);
         auto rotate_angle_idx = layer_id % rotate_angles.size();
         params.angle          = Geometry::deg2rad(rotate_angles.values[rotate_angle_idx]);
     }
-    // Make sure that the resulting density is within the range of EPSILON to 100%.
-    // Values outside this range will be produced within these limits.
-    // params.multiline = std::min(params.multiline, 10); // limit multiline
-    params.density   = std::min(std::max(params.density * params.multiline * 100., EPSILON), 100.);
     return params;
 };
 
