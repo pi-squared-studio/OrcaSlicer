@@ -92,6 +92,7 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
         double angle_add       = 0;                 // additive for the angle step
 
         Vec2d  shift_add       = Vec2d(0., 0.);     // the initial position of the shift for the current range
+        Vec2d  shift_dir       = Vec2d(0., 0.);     // the initial position of the directional shift for the current range
         Vec2d  shift_start     = Vec2d(0., 0.);     // additive for the shift step
         double density_start   = (fixed_infill_density / fixed_multiline) / 100.; // the initial position of the density in internal scale 0...1 without multiline factor
         double density_add     = 0.;                // additive for the density step
@@ -134,10 +135,11 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
 
                             angle_start += angle_add;
                             angle_add   = 0.;
-                            
-                            shift_start += shift_add;
+
+                            shift_start += shift_add + rotate_point_CW(Geometry::deg2rad(angle_start), shift_dir);
                             shift_add   = Vec2d(0., 0.);
-                            
+                            shift_dir   = Vec2d(0., 0.);
+
                             density_start += density_add;
                             density_lin   = 0.;
                             density_add   = 0.;
@@ -191,8 +193,7 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                                         shift_value *= object->config().line_width;
                                         cs++;
                                     } else if (cs[0] == '@') { // value in number of standard lines counted with infill density
-                                        auto object_config = object->config();
-                                        shift_value *= object_config.line_width * region_config.fill_multiline / region_config.sparse_infill_density.get_abs_value(1);
+                                        shift_value *= object->config().line_width / params.density; // * region_config.fill_multiline / region_config.sparse_infill_density.get_abs_value(1)
                                         cs++;
                                     } else if (cs[0] == '%') { // value in the percents of model height
                                         shift_value *= object->height() * 1e-8;
@@ -306,7 +307,7 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
 
                                     if (cs[0] == ':') { // fractional
                                         if (angle_value == 0.)
-                                            angle_value = 1.;
+                                            angle_value = 0.5;
                                         cs++;
                                         double angle_frac = strtod(cs, &cs);
                                         if (angle_frac == 0.)
@@ -328,23 +329,13 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                             }
 
                             // [XY-zone] final processing
-                            double angle_complex(fixed_infill_angle + Geometry::deg2rad(angle_start));
-                            if (has_abs_shift) // the absolute value has changed
-                                if (!shift_abs.isZero()) {
-                                    if (!shift_abs2.isZero())
-                                        shift_start = rotate_point_CW(fixed_infill_angle, shift_abs) + rotate_point_CW(angle_complex, shift_abs2);
-                                    else
-                                        shift_start = rotate_point_CW(fixed_infill_angle, shift_abs);
-                                } else if (!shift_abs2.isZero())
-                                    shift_start = rotate_point_CW(angle_complex, shift_abs2);
+                            if (has_abs_shift) { // the absolute value has changed
+                                double angle_complex(fixed_infill_angle + Geometry::deg2rad(angle_start));
+                                shift_start = rotate_point_CW(fixed_infill_angle, shift_abs) + rotate_point_CW(angle_complex, shift_abs2);
+                            }
 
-                            if (!shift_rel.isZero()) {
-                                if (!shift_rel2.isZero())
-                                    shift_add = rotate_point_CW(fixed_infill_angle, shift_rel) + rotate_point_CW(angle_complex, shift_rel2);
-                                else
-                                    shift_add = rotate_point_CW(fixed_infill_angle, shift_rel);
-                            } else if (!shift_rel2.isZero())
-                                shift_add = rotate_point_CW(angle_complex, shift_rel2);
+                            shift_add = rotate_point_CW(fixed_infill_angle, shift_rel);
+                            shift_dir = rotate_point_CW(fixed_infill_angle, shift_rel2);
 
                             if (cs[0] == '*') { // [R-zone] overall cycles - pre [Z-zone]
                                 cs++;
@@ -408,6 +399,7 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                                     divider_steps = floor(divider_steps);
                                     angle_add      *= divider_steps;
                                     shift_add      *= divider_steps;
+                                    shift_dir      *= divider_steps;
                                     density_add    *= divider_steps;
                                     density_lin    *= divider_steps;
                                     multiline_add  *= divider_steps;
@@ -460,7 +452,7 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
             }
 
             params.angle = Geometry::deg2rad(angle_start + angle_add * negvalue);
-            params.shift = (shift_start + shift_add * negvalue) / SCALING_FACTOR;
+            params.shift = (shift_start + (shift_add + rotate_point_CW(params.angle, shift_dir)) * negvalue) / SCALING_FACTOR;
             if (density_lin) {
                 double _ns     = 1. / density_start;
                 double _ne     = 1. / (density_start + density_lin);
@@ -1681,6 +1673,8 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
         // Orca: dont adjust infills if rotation template is used
         params.dont_adjust |= f->is_templated = (surface_fill.surface.surface_type == stInternal && params.config->sparse_infill_rotate_template != "") || 
                                                 (surface_fill.surface.surface_type == stInternalSolid && params.config->solid_infill_rotate_template != "");
+        if (f->is_templated && surface_fill.params.pattern == ipHilbertCurve)
+            params.pattern_mode = 3;
         if( surface_fill.params.pattern == ipLockedZag ) {
 			params.locked_zag = true;
             params.infill_lock_depth = surface_fill.params.infill_lock_depth;

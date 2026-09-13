@@ -102,6 +102,9 @@ struct FillParams
     const           PrintRegionConfig* config{ nullptr };
     bool            dont_sort{ false }; // do not sort the lines, just simply connect them
     bool            can_reverse{true};
+    // Orca: special value for the pattern generator.
+    // In particular, for the Hilbert curve, can specify the classic mode or choose a centered Hilbert Spiral with its order.
+    int             pattern_mode{0}; 
 
     // Orca: forced print order of surface fill loops/fragments for center-based patterns
     // (Concentric, Archimedean Chords, Octagram Spiral). Default keeps shortest-path ordering.
