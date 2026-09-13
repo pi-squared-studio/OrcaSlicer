@@ -170,7 +170,7 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
 
                                 if (coord_string.find(cs[0]) != std::string::npos) { // [XxYy-zone]
                                     cs++;
-                                    if (is_abs_shift = is_absolute(cs)) // absolute/relative
+                                    if (is_abs_shift == is_absolute(cs)) // absolute/relative
                                         has_abs_shift |= true;
 
                                     if (cs[0] == '_') { // get value
