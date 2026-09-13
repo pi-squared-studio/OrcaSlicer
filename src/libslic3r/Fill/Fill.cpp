@@ -56,7 +56,6 @@ struct Infill_Params
 // Check the link for more info: https://www.orcaslicer.com/wiki/print_settings/strength/strength_settings_infill_rotation_template_metalanguage
 static Infill_Params calculate_infill_position(const PrintObject* object,
                                                size_t layer_id,
-                                               const PrintRegionConfig& region_config,
                                                const double& fixed_infill_angle, // if template is used then it parameter must recieve model's direction
                                                const std::string& template_string,
                                                const double& fixed_infill_density = 100.,
@@ -94,7 +93,7 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
         Vec2d  shift_add       = Vec2d(0., 0.);     // the initial position of the shift for the current range
         Vec2d  shift_dir       = Vec2d(0., 0.);     // the initial position of the directional shift for the current range
         Vec2d  shift_start     = Vec2d(0., 0.);     // additive for the shift step
-        double density_start   = (fixed_infill_density / fixed_multiline) / 100.; // the initial position of the density in internal scale 0...1 without multiline factor
+        double density_start   = (fixed_infill_density / 100.) / fixed_multiline; // the initial position of the density in internal scale 0...1 without multiline factor
         double density_add     = 0.;                // additive for the density step
         double density_lin     = 0.;                // additive for the linear density step
         int    density_adapt   = 0;                 // flag for restoring the normal density representation when miltiline changing
@@ -102,11 +101,11 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
         double multiline_add   = 0.;                // additive for the miltiline step
         
         double limit_fill_z    = object->get_layer(0)->print_z;
-        double start_fill_z = object->get_layer(0)->slice_z;
+        double start_fill_z    = object->get_layer(0)->slice_z;
         // The raft height, or 0 without a raft.
         const double print_z_offset = object->slicing_parameters().object_print_z_min;
-        auto fill_form      = std::string::npos;
-        bool _negative      = false;
+        auto fill_form         = std::string::npos;
+        bool _negative         = false;
         // Vector of stop marks. "1" is the one-time running command, "2" is the dumb command
         // If the all values entire vector is unequal to 0, then stop the parsing from repeating.
         std::vector<int> stop(tk.size(), 0);
@@ -154,13 +153,13 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                             if (tk[t].find('!') != std::string::npos) // [R-zone] one-time running command
                                 stop[t] = 2;
 
-                            char* cs = &tk[t][0];                 // current metacommand
+                            char* cs = &tk[t][0];           // current metacommand
 
-                            Vec2d shift_abs(0., 0.);              // absolute XY-position accumulator
-                            Vec2d shift_abs2(0., 0.);             // absolute XY-position accumulator for infill vector
-                            Vec2d shift_rel(0., 0.);              // relative shift accumulator
-                            Vec2d shift_rel2(0., 0.);             // relative shift accumulator for infill vector
-                            bool has_abs_shift = false;           // has set of absolute XY-position
+                            Vec2d shift_abs(0., 0.);        // absolute XY-position accumulator
+                            Vec2d shift_abs2(0., 0.);       // absolute XY-position accumulator for infill vector
+                            Vec2d shift_rel(0., 0.);        // relative shift accumulator
+                            Vec2d shift_rel2(0., 0.);       // relative shift accumulator for infill vector
+                            bool has_abs_shift = false;     // has set of absolute XY-position
 
                             for (;;) {
                                 bool is_abs_shift = false;
@@ -170,8 +169,9 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
 
                                 if (coord_string.find(cs[0]) != std::string::npos) { // [XxYy-zone]
                                     cs++;
-                                    if (is_abs_shift == is_absolute(cs)) // absolute/relative
-                                        has_abs_shift |= true;
+                                    is_abs_shift = is_absolute(cs);
+                                    if (is_abs_shift) // absolute/relative
+                                        has_abs_shift = true;
 
                                     if (cs[0] == '_') { // get value
                                         cs++;
@@ -193,7 +193,7 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                                         shift_value *= object->config().line_width;
                                         cs++;
                                     } else if (cs[0] == '@') { // value in number of standard lines counted with infill density
-                                        shift_value *= object->config().line_width / params.density; // * region_config.fill_multiline / region_config.sparse_infill_density.get_abs_value(1)
+                                        shift_value *= object->config().line_width / (multiline_start * density_start);
                                         cs++;
                                     } else if (cs[0] == '%') { // value in the percents of model height
                                         shift_value *= object->height() * 1e-8;
@@ -304,8 +304,8 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
 
                                     if (!angle_value && (cs[0] == '+' || cs[0] == '-')) // remove single signs 
                                         cs++;
-
-                                    if (cs[0] == ':') { // fractional
+                                    bool is_fractional = cs[0] == ':';
+                                    if (is_fractional) { // fractional
                                         if (angle_value == 0.)
                                             angle_value = 0.5;
                                         cs++;
@@ -316,7 +316,7 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                                     } 
 
                                     if (cs[0] == '%') { // percentage of full circle
-                                        angle_value *= 3.6;
+                                        angle_value *= is_fractional ? 2. : 3.6;
                                         cs++;
                                     }
                                     if (is_abs_angle)
@@ -329,13 +329,11 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
                             }
 
                             // [XY-zone] final processing
-                            if (has_abs_shift) { // the absolute value has changed
-                                double angle_complex(fixed_infill_angle + Geometry::deg2rad(angle_start));
-                                shift_start = rotate_point_CW(fixed_infill_angle, shift_abs) + rotate_point_CW(angle_complex, shift_abs2);
-                            }
+                            if (has_abs_shift)  // the absolute value has changed
+                                shift_start = rotate_point_CW(fixed_infill_angle, shift_abs) + rotate_point_CW(Geometry::deg2rad(angle_start), shift_abs2);
 
-                            shift_add = rotate_point_CW(fixed_infill_angle, shift_rel);
-                            shift_dir = rotate_point_CW(fixed_infill_angle, shift_rel2);
+                            shift_add += rotate_point_CW(fixed_infill_angle, shift_rel);
+                            shift_dir += rotate_point_CW(fixed_infill_angle + Geometry::deg2rad(angle_start), shift_rel2);
 
                             if (cs[0] == '*') { // [R-zone] overall cycles - pre [Z-zone]
                                 cs++;
@@ -483,11 +481,10 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
 
 double calculate_infill_rotation_angle(const PrintObject* object,
                                        size_t layer_id,
-                                       const PrintRegionConfig& region_config,
                                        const double& fixed_infill_angle,
                                        const std::string& template_string)
 {
-    return calculate_infill_position(object, layer_id, region_config, fixed_infill_angle, template_string).angle;
+    return calculate_infill_position(object, layer_id, fixed_infill_angle, template_string).angle;
 }
 
 struct SurfaceFillParams
@@ -1246,10 +1243,9 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                 params.gyroid_optimized = (params.pattern == ipGyroid) && region_config.gyroid_optimized;
 
                 if (params.extrusion_role == erInternalInfill) {
-                    Infill_Params complex(calculate_infill_position(layer.object(), layer.id(), region_config,
+                    Infill_Params complex(calculate_infill_position(layer.object(), layer.id(),
                                                                     region_config.sparse_infill_rotate_template.value.empty() ?
-                                                                        region_config.infill_direction.value :
-                                                                        align_offset,
+                                                                        region_config.infill_direction.value : align_offset,
                                                                     region_config.sparse_infill_rotate_template.value,
                                                                     params.density, params.multiline));
 
@@ -1270,7 +1266,7 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                         params.angle = Geometry::deg2rad(top_layer_direction_set ? region_config.top_layer_direction.value : region_config.bottom_layer_direction.value);
                         params.fixed_angle = true;
                     } else {
-                        Infill_Params complex(calculate_infill_position(layer.object(), layer.id(), region_config,
+                        Infill_Params complex(calculate_infill_position(layer.object(), layer.id(),
                                                                          region_config.solid_infill_rotate_template.value.empty() ?
                                                                             region_config.solid_infill_direction.value :
                                                                             align_offset,
@@ -1475,10 +1471,9 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                     align_offset = atan2((float) m(1, 0), (float) m(0, 0));
                 }
 
-                Infill_Params complex(calculate_infill_position(layer.object(), layer.id(), region_config,
+                Infill_Params complex(calculate_infill_position(layer.object(), layer.id(),
                                                                  region_config.solid_infill_rotate_template.value.empty() ?
-                                                                    region_config.solid_infill_direction.value :
-                                                                        align_offset,
+                                                                    region_config.solid_infill_direction.value : align_offset,
                                                                  region_config.solid_infill_rotate_template.value));
                 params.angle       = complex.angle;
                 params.shift       = complex.shift.cast<coord_t>();
@@ -2008,7 +2003,7 @@ void Layer::make_ironing()
                 const bool top_layer_direction_set = config.top_layer_direction.value >= 0.;
                 const double top_layer_base_angle  = top_layer_direction_set ?
                     Geometry::deg2rad(config.top_layer_direction.value) :
-                    calculate_infill_rotation_angle(this->object(), this->id(), config, config.solid_infill_direction.value, config.solid_infill_rotate_template.value);
+                    calculate_infill_rotation_angle(this->object(), this->id(), config.solid_infill_direction.value, config.solid_infill_rotate_template.value);
                 double ironing_angle = (config.ironing_angle_fixed ? 0. : top_layer_base_angle) + config.ironing_angle * M_PI / 180.;
                 if (config.align_infill_direction_to_model) {
                     auto m = this->object()->trafo().matrix();
