@@ -87,16 +87,19 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
         int    t               = tk.size();             // metacommand index
         int    repeats         = 0;                     // metacommand repeats counter
         double divider_steps   = 1;                     // the number of steps of the divisor
+        
         double angle_start     = 0.;                    // the initial position of the angle for the current range
         double angle_add       = 0.;                    // additive for the angle step
 
         Vec2d  shift_add       = Vec2d(0., 0.);         // the initial position of the shift for the current range
         Vec2d  shift_dir       = Vec2d(0., 0.);         // the initial position of the directional shift for the current range
         Vec2d  shift_start     = Vec2d(0., 0.);         // additive for the shift step
+        
         double density_start   = (fixed_infill_density / 100.) / fixed_multiline; // the initial position of the density in internal scale 0...1 without multiline factor
         double density_add     = 0.;                    // additive for the density step
         double density_lin     = 0.;                    // additive for the linear density step
         int    density_adapt   = 0;                     // flag for restoring the normal density representation when miltiline changing
+        
         double multiline_start = fixed_multiline;       // the initial position of the miltiline for the current range
         double multiline_add   = 0.;                    // additive for the miltiline step
         
@@ -136,8 +139,7 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
 
                             angle_start += angle_add;
                             angle_add   = 0.;
-
-                            shift_start += shift_add + rotate_point_CW(angle_start, shift_dir);
+                            shift_start += rotate_point_CW(fixed_infill_angle, shift_add) + rotate_point_CW(fixed_infill_angle + angle_start, shift_dir);
                             shift_add   = Vec2d(0., 0.);
                             shift_dir   = Vec2d(0., 0.);
 
@@ -333,10 +335,9 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
 
                             // [XY-zone] final processing
                             if (has_abs_shift)  // the absolute value has changed
-                                shift_start = rotate_point_CW(fixed_infill_angle, shift_abs) +
-                                              rotate_point_CW(angle_start, shift_abs2);
+                                shift_start = shift_abs + rotate_point_CW(angle_start, shift_abs2);
 
-                            shift_add += rotate_point_CW(fixed_infill_angle, shift_rel);
+                            shift_add += shift_rel;
                             shift_dir += rotate_point_CW(angle_start, shift_rel2);
 
                             if (cs[0] == '*') { // [R-zone] overall cycles - pre [Z-zone]
@@ -453,8 +454,8 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
             case 17: negvalue  = (_negative ? -.5 : .5) * cos(negvalue * PI * 2.) + .5; break;     // c-joint, vertical cosine wave
             }
 
-            params.angle = angle_start + angle_add * negvalue + fixed_infill_angle;
-            params.shift = (shift_start + (shift_add + rotate_point_CW(params.angle, shift_dir)) * negvalue) / SCALING_FACTOR;
+            params.angle = angle_start + angle_add * negvalue;
+            params.shift = (shift_start + (rotate_point_CW(fixed_infill_angle, shift_add) + rotate_point_CW(fixed_infill_angle + params.angle, shift_dir)) * negvalue) / SCALING_FACTOR;
             if (density_lin) {
                 double _ns     = 1. / density_start;
                 double _ne     = 1. / (density_start + density_lin);
@@ -483,8 +484,9 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
         str.erase(last, str.end());
         rotate_angles.deserialize(str);
         auto rotate_angle_idx = layer_id % rotate_angles.size();
-        params.angle          = Geometry::deg2rad(rotate_angles.values[rotate_angle_idx]) + fixed_infill_angle;
+        params.angle          = Geometry::deg2rad(rotate_angles.values[rotate_angle_idx]);
     }
+    params.angle += fixed_infill_angle;
     return params;
 };
 
@@ -1470,19 +1472,18 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
 		        params.extrusion_role = erSolidInfill;
 		        const PrintRegionConfig &region_config = layerm.region().config();
 
-                // ORCA: Align infill angle to model
-                float align_offset = 0.f;
-                if (region_config.align_infill_direction_to_model) {
-                    auto m       = layer.object()->trafo().matrix();
-                    align_offset = atan2((float) m(1, 0), (float) m(0, 0));
-                }
+                //// ORCA: Align infill angle to model
+                //float align_offset = 0.f;
+                //if (region_config.align_infill_direction_to_model) {
+                //    auto m       = layer.object()->trafo().matrix();
+                //    align_offset = atan2((float) m(1, 0), (float) m(0, 0));
+                //}
 
                 Infill_Params complex(calculate_infill_position(layer.object(), layer.id(),
-                                                                align_offset + (region_config.solid_infill_rotate_template.value.empty() ?
-                                                                    Geometry::deg2rad(region_config.solid_infill_direction.value) : 0.),
+                                                                Geometry::deg2rad(region_config.solid_infill_direction.value),
                                                                 region_config.solid_infill_rotate_template.value));
                 params.angle       = complex.angle;
-                params.shift       = complex.shift.cast<coord_t>();
+                //params.shift       = complex.shift.cast<coord_t>();
                 params.fixed_angle = !region_config.solid_infill_rotate_template.value.empty();
 
                 // calculate the actual flow we'll be using for this infill

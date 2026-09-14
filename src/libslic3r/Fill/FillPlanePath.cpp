@@ -96,11 +96,15 @@ void FillPlanePath::_fill_surface_single(
     // Sparse infill (or Internal where align == true) needs to be aligned across layers. Align infill across layers using the object's bounding box.
     // Solid infill does not need to be aligned across layers, generate the infill pattern around the clipping expolygon only.
     if (is_internal) { // Internal infill
-        bounding_box = this->bounding_box;
-        bounding_box.translate(this->shift);
-        bounding_box.rotate(-angle);
-        // Expand the bounding box to avoid artifacts at the edges
-        bounding_box.offset(this->shift.norm());
+        if (is_templated) {
+            bounding_box = this->bounding_box;
+            bounding_box.translate(this->shift);
+            bounding_box.rotate(-angle);
+            // Expand the bounding box to avoid artifacts at the edges
+            bounding_box.offset(this->shift.norm());
+        } else {
+            bounding_box = this->bounding_box.rotated(-direction.first);
+        }
     } else if (params.center_of_surface_pattern == CenterOfSurfacePattern::Each_Surface) {
         bounding_box = get_extents(expolygon).inflated(SCALED_EPSILON);
         // Expand the bounding box to avoid artifacts at the edges
@@ -124,7 +128,8 @@ void FillPlanePath::_fill_surface_single(
         auto resolution = scaled<double>(params.resolution) / distance_between_lines;
         if (is_internal) {
             // Filling in a bounding box over the whole object, clip generated polyline against the snug bounding box.
-            bounding_box.translate(-shift.x(), -shift.y());
+            if (is_templated)
+                bounding_box.translate(-shift);
             InfillPolylineClipper output(bounding_box, distance_between_lines);
             this->generate(min_x, min_y, max_x, max_y, resolution, params, output);
             polyline.points = std::move(output.result());
