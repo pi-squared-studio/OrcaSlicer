@@ -85,7 +85,7 @@ void FillPlanePath::_fill_surface_single(
     bbox.offset(scale_(1.1));
     ::Slic3r::SVG svg(debug_out_path("infill_path_%d.svg", this->layer_id).c_str(), bbox);
 #endif
-    double angle = is_templated ? this->angle : direction.first;
+    double angle = fixed_angle ? this->angle : direction.first;
     expolygon.rotate(-angle);
 
     //FIXME Vojtech: We are not sure whether the user expects the fill patterns on visible surfaces to be aligned across all the islands of a single layer.
@@ -96,7 +96,7 @@ void FillPlanePath::_fill_surface_single(
     // Sparse infill (or Internal where align == true) needs to be aligned across layers. Align infill across layers using the object's bounding box.
     // Solid infill does not need to be aligned across layers, generate the infill pattern around the clipping expolygon only.
     if (is_internal) { // Internal infill
-        if (is_templated) {
+        if (fixed_angle) {
             bounding_box = this->bounding_box;
             bounding_box.translate(this->shift);
             bounding_box.rotate(-angle);
@@ -114,7 +114,7 @@ void FillPlanePath::_fill_surface_single(
     else
         bounding_box = extended_object_bounding_box();
 
-    Point shift = (this->centered() || is_templated) ? bounding_box.center() : bounding_box.min;
+    Point shift = (this->centered() || fixed_angle) ? bounding_box.center() : bounding_box.min;
     expolygon.translate(-shift);
     bounding_box.translate(-shift);
 
@@ -128,7 +128,7 @@ void FillPlanePath::_fill_surface_single(
         auto resolution = scaled<double>(params.resolution) / distance_between_lines;
         if (is_internal) {
             // Filling in a bounding box over the whole object, clip generated polyline against the snug bounding box.
-            if (is_templated)
+            if (fixed_angle)
                 bounding_box.translate(-shift);
             InfillPolylineClipper output(bounding_box, distance_between_lines);
             this->generate(min_x, min_y, max_x, max_y, resolution, params, output);

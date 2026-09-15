@@ -69,6 +69,10 @@ struct FillParams
     // Monotonic infill - strictly left to right for better surface quality of top infills.
     bool 		monotonic		{ false };
 
+    // Orca: special value for the pattern generator.
+    // In particular, for the Hilbert curve, can specify the classic mode or choose a centered Hilbert Spiral with its order.
+    int         pattern_mode    {0}; 
+
     // For Honeycomb.
     // we were requested to complete each loop;
     // in this case we don't try to make more continuous paths
@@ -102,9 +106,6 @@ struct FillParams
     const           PrintRegionConfig* config{ nullptr };
     bool            dont_sort{ false }; // do not sort the lines, just simply connect them
     bool            can_reverse{true};
-    // Orca: special value for the pattern generator.
-    // In particular, for the Hilbert curve, can specify the classic mode or choose a centered Hilbert Spiral with its order.
-    int             pattern_mode{0}; 
 
     // Orca: forced print order of surface fill loops/fragments for center-based patterns
     // (Concentric, Archimedean Chords, Octagram Spiral). Default keeps shortest-path ordering.
@@ -158,7 +159,6 @@ public:
     // BBS: all no overlap expolygons in same layer
     ExPolygons  no_overlap_expolygons;
     bool dont_alternate_fill_direction = false;
-    bool is_templated = false;
 
     static float infill_anchor;
     static float infill_anchor_max;

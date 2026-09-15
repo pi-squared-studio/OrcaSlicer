@@ -55,13 +55,13 @@ struct Infill_Params
 // Calculate infill rotation angle (in radians) for a given layer from a rotation template.
 // Check the link for more info: https://www.orcaslicer.com/wiki/print_settings/strength/strength_settings_infill_rotation_template_metalanguage
 // Attention: all incoming and outgoing direction values in radians!
-static Infill_Params calculate_infill_position(const PrintObject* object,
-                                               size_t layer_id,
-                                               const double& fixed_infill_angle, // if template is used then it parameter must recieve model's direction
-                                               const std::string& template_string,
-                                               const double& fixed_infill_density = 100.,
-                                               const int& fixed_multiline = 1,
-                                               double line_width = 0.) // Get initial value from options
+static Infill_Params calculate_infill_position_rad(const PrintObject* object,
+                                                   size_t layer_id,
+                                                   const double& fixed_infill_angle, // if template is used then it parameter must recieve model's direction
+                                                   const std::string& template_string,
+                                                   const double& fixed_infill_density = 100.,
+                                                   const int& fixed_multiline = 1,
+                                                   double line_width = 0.) // Get initial value from options
 {
     Infill_Params params{fixed_infill_angle, Vec2d(0, 0), fixed_infill_density, fixed_multiline};
     if (template_string.empty())
@@ -490,13 +490,13 @@ static Infill_Params calculate_infill_position(const PrintObject* object,
     return params;
 };
 
-// Attention: all incoming and outgoing direction values in radians!
+// Attention: all incoming direction values in degrees!
 double calculate_infill_rotation_angle(const PrintObject* object,
                                        size_t layer_id,
                                        const double& fixed_infill_angle,
                                        const std::string& template_string)
 {
-    return calculate_infill_position(object, layer_id, fixed_infill_angle, template_string).angle;
+    return calculate_infill_position_rad(object, layer_id, Geometry::deg2rad(fixed_infill_angle), template_string).angle;
 }
 
 struct SurfaceFillParams
@@ -505,6 +505,10 @@ struct SurfaceFillParams
     unsigned int 	extruder = 0;
 	// Infill pattern, adjusted for the density etc.
     InfillPattern  	pattern = InfillPattern(0);
+    
+    // Orca: special value for the pattern generator.
+    // In particular, for the Hilbert curve, can specify the classic mode or choose a centered Hilbert Spiral with its order.
+    int pattern_mode{0}; 
 
     // FillBase
     // in unscaled coordinates
@@ -579,6 +583,7 @@ struct SurfaceFillParams
 
 		RETURN_COMPARE_NON_EQUAL(extruder);
 		RETURN_COMPARE_NON_EQUAL_TYPED(unsigned, pattern);
+        RETURN_COMPARE_NON_EQUAL(pattern_mode);
 		RETURN_COMPARE_NON_EQUAL(spacing);
 		RETURN_COMPARE_NON_EQUAL(overlap);
 		RETURN_COMPARE_NON_EQUAL(angle);
@@ -612,6 +617,7 @@ struct SurfaceFillParams
 	bool operator==(const SurfaceFillParams &rhs) const {
 		return  this->extruder 			      == rhs.extruder                &&
 				this->pattern 			      == rhs.pattern                 &&
+                this->pattern_mode 			  == rhs.pattern_mode            &&
 				this->spacing 			      == rhs.spacing                 &&
 				this->overlap 			      == rhs.overlap                 &&
 				this->angle   			      == rhs.angle                   &&
@@ -1255,17 +1261,19 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                 }
 
                 if (params.extrusion_role == erInternalInfill) {
-                    Infill_Params complex(calculate_infill_position(layer.object(), layer.id(),
-                                                                    align_offset + (region_config.sparse_infill_rotate_template.value.empty() ?
-                                                                        Geometry::deg2rad(region_config.infill_direction.value) : 0.),
-                                                                    region_config.sparse_infill_rotate_template.value,
-                                                                    params.density, params.multiline,
-                                                                    region_config.sparse_infill_line_width.value));
+                    params.fixed_angle = !region_config.sparse_infill_rotate_template.value.empty();
+                    if (params.fixed_angle && params.pattern == ipHilbertCurve)
+                        params.pattern_mode = 3;
+                    Infill_Params complex(calculate_infill_position_rad(layer.object(), layer.id(),
+                                                                        align_offset + (params.fixed_angle ?
+                                                                          0. : Geometry::deg2rad(region_config.infill_direction.value)),
+                                                                        region_config.sparse_infill_rotate_template.value,
+                                                                        params.density, params.multiline,
+                                                                        region_config.sparse_infill_line_width.value));
                     params.angle       = complex.angle;
                     params.shift       = complex.shift.cast<coord_t>();
                     params.density     = complex.density;
                     params.multiline   = complex.multiline;
-                    params.fixed_angle = !region_config.sparse_infill_rotate_template.value.empty();
 
                     // Orca: the smoothing factor only applies to the sparse infill patterns that
                     // implement it. The fills clamp and validate the value themselves.
@@ -1278,14 +1286,16 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                         params.angle = Geometry::deg2rad(top_layer_direction_set ? region_config.top_layer_direction.value : region_config.bottom_layer_direction.value);
                         params.fixed_angle = true;
                     } else {
-                        Infill_Params complex(calculate_infill_position(layer.object(), layer.id(),
-                                                                        align_offset + (region_config.solid_infill_rotate_template.value.empty() ?
-                                                                            Geometry::deg2rad(region_config.solid_infill_direction.value) : 0.),
-                                                                        region_config.solid_infill_rotate_template.value, 1,
-                                                                        region_config.internal_solid_infill_line_width.value));
+                        params.fixed_angle = !region_config.solid_infill_rotate_template.value.empty();
+                        if (params.fixed_angle && params.pattern == ipHilbertCurve)
+                            params.pattern_mode = 3;
+                        Infill_Params complex(calculate_infill_position_rad(layer.object(), layer.id(),
+                                                                            align_offset + (params.fixed_angle ?
+                                                                                0. : Geometry::deg2rad(region_config.solid_infill_direction.value)),
+                                                                            region_config.solid_infill_rotate_template.value, 1,
+                                                                            region_config.internal_solid_infill_line_width.value));
                         params.angle = complex.angle;
                         params.shift = complex.shift.cast<coord_t>();
-                        params.fixed_angle = !region_config.solid_infill_rotate_template.value.empty();
                     }
                 }
                 params.bridge_angle = float(surface.bridge_angle);
@@ -1472,18 +1482,9 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
 		        params.extrusion_role = erSolidInfill;
 		        const PrintRegionConfig &region_config = layerm.region().config();
 
-                //// ORCA: Align infill angle to model
-                //float align_offset = 0.f;
-                //if (region_config.align_infill_direction_to_model) {
-                //    auto m       = layer.object()->trafo().matrix();
-                //    align_offset = atan2((float) m(1, 0), (float) m(0, 0));
-                //}
-
-                Infill_Params complex(calculate_infill_position(layer.object(), layer.id(),
-                                                                Geometry::deg2rad(region_config.solid_infill_direction.value),
-                                                                region_config.solid_infill_rotate_template.value));
-                params.angle       = complex.angle;
-                //params.shift       = complex.shift.cast<coord_t>();
+                params.angle = calculate_infill_rotation_angle(layer.object(), layer.id(),
+                                                               region_config.solid_infill_direction.value,
+                                                               region_config.solid_infill_rotate_template.value);
                 params.fixed_angle = !region_config.solid_infill_rotate_template.value.empty();
 
                 // calculate the actual flow we'll be using for this infill
@@ -1690,11 +1691,11 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
             params.center_of_surface_pattern = surface_fill.params.center_of_surface_pattern; // Orca: center of surface pattern
         }
 
-        // Orca: dont adjust infills if rotation template is used
-        params.dont_adjust |= f->is_templated = (surface_fill.surface.surface_type == stInternal && params.config->sparse_infill_rotate_template != "") || 
-                                                (surface_fill.surface.surface_type == stInternalSolid && params.config->solid_infill_rotate_template != "");
-        if (f->is_templated && surface_fill.params.pattern == ipHilbertCurve)
-            params.pattern_mode = 3;
+        //// Orca: dont adjust infills if rotation template is used
+        //params.dont_adjust |= f->is_templated = (surface_fill.surface.surface_type == stInternal && !params.config->sparse_infill_rotate_template.value.empty()) || 
+        //                                        (surface_fill.surface.surface_type == stInternalSolid && !params.config->solid_infill_rotate_template.value.empty());
+        //if (f->is_templated && surface_fill.params.pattern == ipHilbertCurve)
+        //    params.pattern_mode = 3;
       
         if( surface_fill.params.pattern == ipLockedZag ) {
 			params.locked_zag = true;
@@ -1891,6 +1892,7 @@ Polylines Layer::generate_sparse_infill_polylines_for_anchoring(FillAdaptive::Oc
         // Without the sparse extrusion role, the filler uses each surface's bounds
         // instead of the object's bounds, so bridge anchors shift away from printed infill.
         params.extrusion_role            = surface_fill.params.extrusion_role;
+        params.pattern_mode              = surface_fill.params.pattern_mode;
 
         for (ExPolygon &expoly : surface_fill.expolygons) {
             // Orca: Match the per-body origin of make_fills() before generating physical anchors.
@@ -2010,7 +2012,7 @@ void Layer::make_ironing()
                 const bool top_layer_direction_set = config.top_layer_direction.value >= 0.;
                 const double top_layer_base_angle  = top_layer_direction_set ?
                     Geometry::deg2rad(config.top_layer_direction.value) :
-                    calculate_infill_rotation_angle(this->object(), this->id(), Geometry::deg2rad(config.solid_infill_direction.value), config.solid_infill_rotate_template.value);
+                    calculate_infill_rotation_angle(this->object(), this->id(), config.solid_infill_direction.value, config.solid_infill_rotate_template.value);
                 double ironing_angle = (config.ironing_angle_fixed ? 0. : top_layer_base_angle) + config.ironing_angle * M_PI / 180.;
                 if (config.align_infill_direction_to_model) {
                     auto m = this->object()->trafo().matrix();
