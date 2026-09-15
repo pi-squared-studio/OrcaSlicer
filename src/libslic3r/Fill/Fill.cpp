@@ -69,7 +69,7 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
     // Convert the id to an index. Layer::id() counts the raft layers, object->layers() does not.
     const size_t first_object_layer_id = object->get_layer(0)->id();
     layer_id                           = layer_id > first_object_layer_id ? layer_id - first_object_layer_id : 0;
-    const std::string search_string    = "^~/NnZz$LlUuQq#MCc"; // Attention: the first character in the string must be the ^ symbol, as it will later be escaped in the regex.
+    const std::string search_string    = "^~/NnZz$LlUuQq#JjCc"; // Attention: the first character in the string must be the ^ symbol, as it will later be escaped in the regex.
     const std::string coord_string     = "XxYy";
     const std::string density_string   = "Dd";
     const std::string angle_string     = "A+-_0123456789.";
@@ -77,9 +77,10 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
         // Check for the "0X" character combination, which may be interpreted incorrectly by the strtod() function. 
         // Replace it with "X". The cases like "10X" not replaced.
         std::string template_string2 = std::regex_replace(template_string, std::regex("(^|\\D)0+([xX])"), "$1$2");
+        template_string2 = std::regex_replace(template_string2, std::regex(";"), ""); // remove the easy-reading separators
         std::regex del("[\\s,]+");
         std::sregex_token_iterator it(template_string2.begin(), template_string2.end(), del, -1);
-        std::vector<std::string> tk;                // metacommands array
+        std::vector<std::string> tk;                    // metacommands array
         std::sregex_token_iterator end;
         while (it != end) {
             tk.push_back(*it++);
@@ -434,7 +435,7 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
 
             switch (fill_form) {
             case 0:  negvalue += (double) rand() / RAND_MAX - .5; break;                           // ^-joint, pseudorandom, disperse at middle line
-            case 1:  negvalue  = (double) rand() / RAND_MAX; break;                                // ~-joint, random, fill the whole angle
+            case 1:  negvalue  = (double) rand() / RAND_MAX; break;                                // ~-joint, random, fill the whole range
             case 2:  break;                                                                        // /-joint, linear
             case 3:  negvalue -= sin(negvalue * PI * 2.) / (PI * 2.); break;                       // N-joint, sinus, vertical start
             case 4:  negvalue -= sin(negvalue * PI * 2.) / (PI * 4.); break;                       // n-joint, sinus, vertical start, lazy
@@ -447,11 +448,12 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
             case 11: negvalue  = pow(1 - negvalue, 2); break;                                      // u-joint, squared, x2 inverse
             case 12: negvalue  = 1. - pow(1. - negvalue, 3); break;                                // Q-joint, cubic, x3
             case 13: negvalue  = pow(1. - negvalue, 3); break;                                     // q-joint, cubic, x3 inverse
-            case 14: negvalue  = _negative ? 0. : 1.; break;                                       // #-joint, vertical at the end angle
-            case 15: negvalue  = 0.5; break;                                                       // M-joint, like #-joint but placed at middle angle (former |-joint)
-            case 16: negvalue  = _negative ? 1 - sqrt(1 - pow(negvalue * 2 - 1, 2)) : 
+            case 14: negvalue  = _negative ? 0. : 1.; break;                                       // #-joint, vertical at the end of range
+            case 15: negvalue  = 0.5; break;                                                       // J-joint, like #-joint but placed at middle angle (former |-joint)
+            case 16: negvalue  = _negative != (negvalue > 0.5) ? 0. : 1.; break;                   // j-joint, vertical separated at the start and end of range
+            case 17: negvalue  = _negative ? 1 - sqrt(1 - pow(negvalue * 2 - 1, 2)) : 
                                              sqrt(1 - pow(negvalue * 2 - 1, 2)); break;            // C-joint, half of circle // (_negative ? 1 - sin(negvalue * PI) : sin(negvalue * PI))
-            case 17: negvalue  = (_negative ? -.5 : .5) * cos(negvalue * PI * 2.) + .5; break;     // c-joint, vertical cosine wave
+            case 18: negvalue  = (_negative ? -.5 : .5) * cos(negvalue * PI * 2.) + .5; break;     // c-joint, vertical cosine wave
             }
 
             params.angle = angle_start + angle_add * negvalue;
@@ -490,7 +492,7 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
     return params;
 };
 
-// Attention: all incoming direction values in degrees!
+// Attention: all incoming direction value in degrees!
 double calculate_infill_rotation_angle(const PrintObject* object,
                                        size_t layer_id,
                                        const double& fixed_infill_angle,
@@ -1482,10 +1484,10 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
 		        params.extrusion_role = erSolidInfill;
 		        const PrintRegionConfig &region_config = layerm.region().config();
 
-                params.angle = calculate_infill_rotation_angle(layer.object(), layer.id(),
-                                                               region_config.solid_infill_direction.value,
-                                                               region_config.solid_infill_rotate_template.value);
                 params.fixed_angle = !region_config.solid_infill_rotate_template.value.empty();
+                params.angle = calculate_infill_rotation_angle(layer.object(), layer.id(),
+                                                               params.fixed_angle ? 0. : region_config.solid_infill_direction.value,
+                                                               region_config.solid_infill_rotate_template.value);
 
                 // calculate the actual flow we'll be using for this infill
 				params.flow = layerm.flow(frSolidInfill);
@@ -2020,16 +2022,18 @@ void Layer::make_ironing()
                     ? config.filament_ironing_speed.get_at(extruder_idx)
                     : config.ironing_speed);
                 const bool top_layer_direction_set = config.top_layer_direction.value >= 0.;
+                ironing_params.fixed_angle = config.ironing_angle_fixed || top_layer_direction_set || !config.solid_infill_rotate_template.value.empty();
                 const double top_layer_base_angle  = top_layer_direction_set ?
                     Geometry::deg2rad(config.top_layer_direction.value) :
-                    calculate_infill_rotation_angle(this->object(), this->id(), config.solid_infill_direction.value, config.solid_infill_rotate_template.value);
+                    calculate_infill_rotation_angle(this->object(), this->id(), 
+                                                    ironing_params.fixed_angle ? 0. : config.solid_infill_direction.value, 
+                                                    config.solid_infill_rotate_template.value);
                 double ironing_angle = (config.ironing_angle_fixed ? 0. : top_layer_base_angle) + config.ironing_angle * M_PI / 180.;
                 if (config.align_infill_direction_to_model) {
                     auto m = this->object()->trafo().matrix();
                     ironing_angle += atan2((double)m(1, 0), (double)m(0, 0));
                 }
                 ironing_params.angle      = ironing_angle;
-                ironing_params.fixed_angle = config.ironing_angle_fixed || top_layer_direction_set || !config.solid_infill_rotate_template.value.empty();
 				ironing_params.pattern      = config.ironing_pattern;
 				ironing_params.layerm 		= layerm;
 				by_extruder.emplace_back(ironing_params);
