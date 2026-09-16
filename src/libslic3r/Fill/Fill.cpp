@@ -85,8 +85,8 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
         while (it != end) {
             tk.push_back(*it++);
         }
-        int    t               = tk.size();             // metacommand index
-        int    repeats         = 0;                     // metacommand repeats counter
+        size_t t               = tk.size();             // metacommand index
+        size_t repeats         = 0;                     // metacommand repeats counter
         double divider_steps   = 1;                     // the number of steps of the divisor
         
         double angle_start     = 0.;                    // the initial position of the angle for the current range
@@ -99,27 +99,26 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
         double density_start   = (fixed_infill_density / 100.) / fixed_multiline; // the initial position of the density in internal scale 0...1 without multiline factor
         double density_add     = 0.;                    // additive for the density step
         double density_lin     = 0.;                    // additive for the linear density step
-        int    density_adapt   = 0;                     // flag for restoring the normal density representation when miltiline changing
+        size_t density_adapt   = 0;                     // flag for restoring the normal density representation when miltiline changing
         
         double multiline_start = fixed_multiline;       // the initial position of the miltiline for the current range
         double multiline_add   = 0.;                    // additive for the miltiline step
         
-        double limit_fill_z    = object->get_layer(0)->print_z;
         double start_fill_z    = object->get_layer(0)->slice_z;
+        double limit_fill_z    = 0.;
         // The raft height, or 0 without a raft.
         const double print_z_offset = object->slicing_parameters().object_print_z_min + EPSILON;
         auto fill_form         = std::string::npos;
-        bool _negative         = false;
+        bool is_negative         = false;
         // Vector of stop marks. "1" is the one-time running command, "2" is the dumb command
         // If the all values entire vector is unequal to 0, then stop the parsing from repeating.
-        std::vector<int> stop(tk.size(), 0);
+        std::vector<size_t> stop(tk.size(), 0);
 
         line_width = line_width ? line_width : object->config().line_width;
 
-        for (int i = 0; i <= layer_id; i++) {
+        for (size_t i = 0; i <= layer_id; i++) {
             double fill_z = object->get_layer(i)->slice_z;
             
-            // slice_z is measured from the bottom of the model, limit_fill_z from the build plate.
             if (limit_fill_z <= object->get_layer(i)->print_z + print_z_offset) {
 
                 if (repeats-- > 0) { // if repeats >0 then restore parameters for new iteration
@@ -136,7 +135,7 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
                             t = 0;
 
                         if (stop[t] < 2) {  // validate only dumb commands
-                            _negative   = false;
+                            is_negative   = false;
 
                             angle_start += angle_add;
                             angle_add   = 0.;
@@ -152,7 +151,7 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
                             multiline_start += multiline_add;
                             multiline_add  = 0.;
                             
-                            divider_steps = 1;
+                            divider_steps = 0.;
                             repeats       = 1;
 
                             if (tk[t].find('!') != std::string::npos) // [R-zone] one-time running command
@@ -366,86 +365,78 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
                                 repeats = strtol(cs, &cs, 0);
                             }
 
-                            if (cs[0] != '\0') { // if the [Z-zone] is present
-                                if (cs[0] == 'B') {
-                                    divider_steps = object->print()->default_region_config().bottom_shell_layers.value;
-                                    cs++;
-                                } else if (cs[0] == 'T') {
-                                    divider_steps = object->print()->default_region_config().top_shell_layers.value;
-                                    cs++;
-                                } else {
-                                    fill_form = search_string.find(cs[0]);
-                                    if (fill_form != std::string::npos)
-                                        cs++;
-                                    _negative = (cs[0] == '-'); // negative parameter
-                                    divider_steps = abs(strtod(cs, &cs));
-                                    if (cs[0] == ':') { // fractional
-                                        if (divider_steps == 0.)
-                                            divider_steps = 1.;
-                                        cs++;
-                                        double angle_frac = strtod(cs, &cs);
-                                        if (angle_frac == 0.)
-                                            angle_frac = 1.;
-                                        divider_steps /= angle_frac;
-                                    }
-                                    if (divider_steps && cs[0] != '\0' && cs[0] != '!') {
-                                        if (cs[0] == '%') { // value in the percents of fill_z
-                                            limit_fill_z = (divider_steps * object->height() + object->get_layer(0)->height / 2) * 1e-8;
-                                            cs++;
-                                        } else if (cs[0] == '#') { // value in the feet
-                                            limit_fill_z = divider_steps * object->config().layer_height;
-                                            cs++;
-                                        } else if (cs[0] == '\'') { // value in the feet
-                                            limit_fill_z = divider_steps * 12 * 25.4;
-                                            cs++;
-                                        } else if (cs[0] == '\"') { // value in the inches
-                                            limit_fill_z = divider_steps * 25.4;
-                                            cs++;
-                                        } else if (cs[0] == '&') { // value in numerical width of standard lines
-                                            limit_fill_z = divider_steps * line_width;
-                                            cs++;
-                                         } else if (cs[0] == '@') { // value in number of standard lines counted with infill density
-                                            limit_fill_z = divider_steps * line_width / density_start - line_width * (1 - 1 / multiline_start);
-                                            cs++;
-                                        } else if (cs[0] == 'c') { // value in centimeters
-                                            limit_fill_z = divider_steps * 10.;
-                                            cs++;
-                                            if (cs[0] == 'm') // finish centimeters
-                                                cs++;
-                                        } else if (cs[0] == 'm') {
-                                            cs++;
-                                            if (cs[0] == 'm') { // value in the millimeters
-                                                limit_fill_z = divider_steps * 1.;
-                                                cs++;
-                                            } else {
-                                                limit_fill_z = divider_steps * 1000.;
-                                            }
-                                        }
-                                        limit_fill_z += fill_z;
-                                        divider_steps = 0; // limit_fill_z has already count
-                                    }
-                                }
-                                if (cs[0] == '*') { // [R-zone] overall cycles - post [Z-zone]
-                                    cs++;
-                                    repeats = strtol(cs, &cs, 0);
-                                }
-                            } else
-                                divider_steps = 1;
+                            double height_value(0.);
 
-                            if (divider_steps) { // if limit_fill_z does not setting by lenght method. Get count the layer id above model height
-                                divider_steps = floor(divider_steps);
-                                if ((fill_form == std::string::npos) && (divider_steps > (1 + EPSILON))) {
-                                    angle_add      *= divider_steps;
-                                    shift_add      *= divider_steps;
-                                    shift_dir      *= divider_steps;
-                                    density_add    *= divider_steps;
-                                    density_lin    *= divider_steps;
-                                    multiline_add  *= divider_steps;
+                            if (cs[0] == 'B') {
+                                divider_steps = object->print()->default_region_config().bottom_shell_layers.value;
+                                cs++;
+                            } else if (cs[0] == 'T') {
+                                divider_steps = object->print()->default_region_config().top_shell_layers.value;
+                                cs++;
+                            } else {
+                                fill_form = search_string.find(cs[0]);
+                                if (fill_form != std::string::npos)
+                                    cs++;
+                                is_negative = (cs[0] == '-'); // negative parameter
+                                height_value = abs(strtod(cs, &cs));
+                                if (cs[0] == ':') { // fractional
+                                    if (height_value == 0.)
+                                        height_value = 1.;
+                                    cs++;
+                                    double height_frac = strtod(cs, &cs);
+                                    if (height_frac == 0.)
+                                        height_frac = 1.;
+                                    height_value /= height_frac;
                                 }
-                                int idx      = i + std::max(divider_steps - 1, 0.);
-                                int sdx      = std::max(0, idx - (int) object->layers().size());
-                                idx          = std::min(idx, (int) object->layers().size() - 1);
-                                limit_fill_z = object->get_layer(idx)->print_z + sdx * object->config().layer_height;
+                                if (height_value && cs[0] != '\0' && cs[0] != '!') {
+                                    if (cs[0] == '%') { // value in the percents of fill_z
+                                        limit_fill_z = (height_value * object->height() + object->get_layer(0)->height / 2) * 1e-8;
+                                        cs++;
+                                    } else if (cs[0] == '#') { // value in the feet
+                                        limit_fill_z = height_value * object->get_layer(i)->height;
+                                        cs++;
+                                    } else if (cs[0] == '\'') { // value in the feet
+                                        limit_fill_z = height_value * 12 * 25.4;
+                                        cs++;
+                                    } else if (cs[0] == '\"') { // value in the inches
+                                        limit_fill_z = height_value * 25.4;
+                                        cs++;
+                                    } else if (cs[0] == '&') { // value in numerical width of standard lines
+                                        limit_fill_z = height_value * line_width;
+                                        cs++;
+                                        } else if (cs[0] == '@') { // value in number of standard lines counted with infill density
+                                        limit_fill_z = height_value * line_width / density_start - line_width * (1 - 1 / multiline_start);
+                                        cs++;
+                                    } else if (cs[0] == 'c') { // value in centimeters
+                                        limit_fill_z = height_value * 10.;
+                                        cs++;
+                                        if (cs[0] == 'm') // finish centimeters
+                                            cs++;
+                                    } else if (cs[0] == 'm') {
+                                        cs++;
+                                        if (cs[0] == 'm') { // value in the millimeters
+                                            limit_fill_z = height_value * 1.;
+                                            cs++;
+                                        } else {
+                                            limit_fill_z = height_value * 1000.;
+                                        }
+                                    } else
+                                        divider_steps = std::max(height_value, 1.); //  divider_steps > 0 : count by layers
+                                    
+                                    limit_fill_z += fill_z;
+                                } else
+                                    divider_steps = std::max(height_value, 1.);
+                            }
+
+                            if (cs[0] == '*') { // [R-zone] overall cycles - post [Z-zone]
+                                cs++;
+                                repeats = strtol(cs, &cs, 0);
+                            }
+
+                            if (divider_steps) {
+                                divider_steps = round(divider_steps);
+                                size_t idx   = std::min(i + (size_t) divider_steps - 1, object->layers().size() - 1);
+                                limit_fill_z = object->get_layer(idx)->print_z + EPSILON * 2;
                             }
 
                             if (!repeats) {                  // if overall cycles = 0
@@ -454,13 +445,14 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
                                 limit_fill_z = start_fill_z; // disable guard range
                             } else
                                 repeats--; // reduce one step because it has already been completed
+
                         }
                         t++;
                     } while (is_dumb && ((t < tk.size()) || std::any_of(stop.begin(), stop.end(), [](int v) { return v == 0; }))); // if this is a set of dumb or one-time running instruction which never reaprated twice
                 }
             }
 
-            double negvalue = divider_steps ? 1. : std::min(std::max((_negative ? (limit_fill_z - fill_z) : (fill_z - start_fill_z)) / (limit_fill_z - start_fill_z), 0.), 1.);
+            double negvalue = std::min(std::max((is_negative ? (limit_fill_z - fill_z) : (fill_z - start_fill_z)) / (limit_fill_z - start_fill_z), 0.), 1.);
 
             switch (fill_form) {
             case 0:  negvalue += (double) rand() / RAND_MAX - .5; break;                           // ^-joint, pseudorandom, disperse at middle line
@@ -477,16 +469,17 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
             case 11: negvalue  = pow(1 - negvalue, 2); break;                                      // u-joint, squared, x2 inverse
             case 12: negvalue  = 1. - pow(1. - negvalue, 3); break;                                // Q-joint, cubic, x3
             case 13: negvalue  = pow(1. - negvalue, 3); break;                                     // q-joint, cubic, x3 inverse
-            case 14: negvalue  = _negative ? 0. : 1.; break;                                       // #-joint, vertical at the end of range
+            case 14: negvalue  = is_negative ? 0. : 1.; break;                                     // #-joint, vertical at the end of range
             case 15: negvalue  = 0.5; break;                                                       // J-joint, like #-joint but placed at middle angle (former |-joint)
-            case 16: negvalue  = _negative != (negvalue > 0.5) ? 0. : 1.; break;                   // j-joint, vertical separated at the start and end of range
-            case 17: negvalue  = _negative ? 1 - sqrt(1 - pow(negvalue * 2 - 1, 2)) : 
-                                             sqrt(1 - pow(negvalue * 2 - 1, 2)); break;            // C-joint, half of circle // (_negative ? 1 - sin(negvalue * PI) : sin(negvalue * PI))
-            case 18: negvalue  = (_negative ? -.5 : .5) * cos(negvalue * PI * 2.) + .5; break;     // c-joint, vertical cosine wave
+            case 16: negvalue  = is_negative != (negvalue > 0.5) ? 0. : 1.; break;                 // j-joint, vertical separated at the start and end of range
+            case 17: negvalue  = is_negative ? 1 - sqrt(1 - pow(negvalue * 2 - 1, 2)) : 
+                                               sqrt(1 - pow(negvalue * 2 - 1, 2)); break;          // C-joint, half of circle // (_negative ? 1 - sin(negvalue * PI) : sin(negvalue * PI))
+            case 18: negvalue  = (is_negative ? -.5 : .5) * cos(negvalue * PI * 2.) + .5; break;   // c-joint, vertical cosine wave
+            default: negvalue  = 1.;
             }
 
             params.angle = angle_start + angle_add * negvalue;
-            params.shift = (shift_start + (rotate_point_CW(fixed_infill_angle, shift_add) + rotate_point_CW(fixed_infill_angle + params.angle, shift_dir)) * negvalue) / SCALING_FACTOR;
+            params.shift = (shift_start + (rotate_point_CW(fixed_infill_angle, shift_add) + rotate_point_CW(fixed_infill_angle + params.angle, shift_dir)) * divider_steps) / SCALING_FACTOR;
             if (density_lin) {
                 double _ns     = 1. / density_start;
                 double _ne     = 1. / (density_start + density_lin);
