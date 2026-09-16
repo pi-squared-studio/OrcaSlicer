@@ -107,7 +107,7 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
         double limit_fill_z    = object->get_layer(0)->print_z;
         double start_fill_z    = object->get_layer(0)->slice_z;
         // The raft height, or 0 without a raft.
-        const double print_z_offset = object->slicing_parameters().object_print_z_min;
+        const double print_z_offset = object->slicing_parameters().object_print_z_min + EPSILON;
         auto fill_form         = std::string::npos;
         bool _negative         = false;
         // Vector of stop marks. "1" is the one-time running command, "2" is the dumb command
@@ -168,7 +168,7 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
 
                             for (;;) {
                                 bool is_abs_shift = false;
-                                char* zone_mark = cs;
+                                char zone_mark = cs[0];
                                 double shift_value(0.);
                                 is_dumb = false;
 
@@ -178,8 +178,18 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
                                     if (is_abs_shift) // absolute/relative
                                         has_abs_shift = true;
 
-                                    if (cs[0] == '_') { // get value
+                                    int y_sign = 0.;
+                                    if (cs[0] == 'Y' || cs[0] == 'y') { // get diagonal
                                         cs++;
+                                        y_sign = 1.;
+                                    }
+
+                                    if (cs[0] == '_' && (cs[1] == 'Y' || cs[1] == 'y')) { // get diagonal
+                                        cs+=2;
+                                        y_sign = -1.;
+                                    }
+
+                                    if (cs[0] == '_') { // get value
                                         shift_value = -strtod(cs, &cs);
                                     } else
                                         shift_value = strtod(cs, &cs);
@@ -222,22 +232,32 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
                                             shift_value *= 1000.;
                                     }
 
-                                    if (zone_mark[0] == 'X') { // get X shift
-                                        if (is_abs_shift)
+                                    if (zone_mark == 'X') { // get X shift
+                                        if (is_abs_shift) {
                                             shift_abs[0] += shift_value;
-                                        else
+                                            if (y_sign)
+                                                shift_abs[1] += shift_value * y_sign;
+                                        } else {
                                             shift_rel[0] += shift_value;
-                                    } else if (zone_mark[0] == 'Y') { // get Y shift
+                                            if (y_sign)
+                                                shift_rel[1] += shift_value * y_sign;
+                                        }
+                                    } else if (zone_mark == 'x') { // get relative X shift
+                                        if (is_abs_shift) {
+                                            shift_abs2[0] += shift_value;
+                                            if (y_sign)
+                                                shift_abs2[1] += shift_value * y_sign;
+                                        } else {
+                                            shift_rel2[0] += shift_value;
+                                            if (y_sign)
+                                                shift_rel2[1] += shift_value * y_sign;
+                                        }
+                                    } else  if (zone_mark == 'Y') { // get Y shift
                                         if (is_abs_shift)
                                             shift_abs[1] += shift_value;
                                         else
                                             shift_rel[1] += shift_value;
-                                    } else if (zone_mark[0] == 'x') { // get relative X shift
-                                        if (is_abs_shift)
-                                            shift_abs2[0] += shift_value;
-                                        else
-                                            shift_rel2[0] += shift_value;
-                                    } else if (zone_mark[0] == 'y') { // get relative Y shift
+                                    } else if (zone_mark == 'y') { // get relative Y shift
                                         if (is_abs_shift)
                                             shift_abs2[1] += shift_value;
                                         else
@@ -249,7 +269,7 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
                                     double density_value(strtod(cs, &cs)); // read density parameter
                                     if (cs[0] == ':') { // fractional
                                         double multiline_value = std::max(density_value, 1.);
-                                        if (zone_mark[0] == 'd')
+                                        if (zone_mark == 'd')
                                             density_adapt = 2;
                                         if (density_value) {
                                             if (is_abs_density)
@@ -266,7 +286,7 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
                                                 density_start = density_value / multiline_value;
                                             else {
                                                 density_adapt = 0;
-                                                if (zone_mark[0] == 'd')
+                                                if (zone_mark == 'd')
                                                     density_lin += density_value / multiline_value;
                                                 else
                                                     density_add += density_value / multiline_value;
@@ -283,10 +303,10 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
                                         }                                 
                                         
                                         if (is_abs_density) {
-                                            density_start = (zone_mark[0] == 'd') ?  
+                                            density_start = (zone_mark == 'd') ?  
                                                 (density_value < 0 ? -1 : 1) * pow(density_value, 2.) : density_value;
                                         } else {
-                                            if (zone_mark[0] == 'd')
+                                            if (zone_mark == 'd')
                                                 density_lin += density_value;
                                             else
                                                 density_add += density_value;
@@ -346,61 +366,75 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
                                 repeats = strtol(cs, &cs, 0);
                             }
 
-                            if (cs[0] == 'B') {
-                                divider_steps = object->print()->default_region_config().bottom_shell_layers.value;
-                                cs++;
-                            } else if (cs[0] == 'T') {
-                                divider_steps = object->print()->default_region_config().top_shell_layers.value;
-                                cs++;
-                            } else {
-                                fill_form = search_string.find(cs[0]);
-                                if (fill_form != std::string::npos)
+                            if (cs[0] != '\0') { // if the [Z-zone] is present
+                                if (cs[0] == 'B') {
+                                    divider_steps = object->print()->default_region_config().bottom_shell_layers.value;
                                     cs++;
-                                _negative = (cs[0] == '-'); // negative parameter
-                                divider_steps = abs(strtod(cs, &cs));
-                                if (cs[0] == ':') { // fractional
-                                    if (divider_steps == 0.)
-                                        divider_steps = 1.;
+                                } else if (cs[0] == 'T') {
+                                    divider_steps = object->print()->default_region_config().top_shell_layers.value;
                                     cs++;
-                                    double angle_frac = strtod(cs, &cs);
-                                    if (angle_frac == 0.)
-                                        angle_frac = 1.;
-                                    divider_steps /= angle_frac;
-                                }
-                                if (divider_steps && cs[0] != '\0' && cs[0] != '!') {
-                                    if (cs[0] == '%') { // value in the percents of fill_z
-                                        limit_fill_z = (divider_steps * object->height() + object->get_layer(0)->height / 2) * 1e-8;
+                                } else {
+                                    fill_form = search_string.find(cs[0]);
+                                    if (fill_form != std::string::npos)
                                         cs++;
-                                    } else if (cs[0] == '#') { // value in the feet
-                                        limit_fill_z = divider_steps * object->config().layer_height;
+                                    _negative = (cs[0] == '-'); // negative parameter
+                                    divider_steps = abs(strtod(cs, &cs));
+                                    if (cs[0] == ':') { // fractional
+                                        if (divider_steps == 0.)
+                                            divider_steps = 1.;
                                         cs++;
-                                    } else if (cs[0] == '\'') { // value in the feet
-                                        limit_fill_z = divider_steps * 12 * 25.4;
-                                        cs++;
-                                    } else if (cs[0] == '\"') { // value in the inches
-                                        limit_fill_z = divider_steps * 25.4;
-                                        cs++;
-                                    } else if (cs[0] == 'c') { // value in centimeters
-                                        limit_fill_z = divider_steps * 10.;
-                                        cs++;
-                                        if (cs[0] == 'm') // finish centimeters
-                                            cs++;
-                                    } else if (cs[0] == 'm') {
-                                        cs++;
-                                        if (cs[0] == 'm') { // value in the millimeters
-                                            limit_fill_z = divider_steps * 1.;
-                                            cs++;
-                                        } else {
-                                            limit_fill_z = divider_steps * 1000.;
-                                        }
+                                        double angle_frac = strtod(cs, &cs);
+                                        if (angle_frac == 0.)
+                                            angle_frac = 1.;
+                                        divider_steps /= angle_frac;
                                     }
-                                    limit_fill_z += fill_z;
-                                    divider_steps = 0; // limit_fill_z has already count
+                                    if (divider_steps && cs[0] != '\0' && cs[0] != '!') {
+                                        if (cs[0] == '%') { // value in the percents of fill_z
+                                            limit_fill_z = (divider_steps * object->height() + object->get_layer(0)->height / 2) * 1e-8;
+                                            cs++;
+                                        } else if (cs[0] == '#') { // value in the feet
+                                            limit_fill_z = divider_steps * object->config().layer_height;
+                                            cs++;
+                                        } else if (cs[0] == '\'') { // value in the feet
+                                            limit_fill_z = divider_steps * 12 * 25.4;
+                                            cs++;
+                                        } else if (cs[0] == '\"') { // value in the inches
+                                            limit_fill_z = divider_steps * 25.4;
+                                            cs++;
+                                        } else if (cs[0] == '&') { // value in numerical width of standard lines
+                                            limit_fill_z = divider_steps * line_width;
+                                            cs++;
+                                         } else if (cs[0] == '@') { // value in number of standard lines counted with infill density
+                                            limit_fill_z = divider_steps * line_width / density_start - line_width * (1 - 1 / multiline_start);
+                                            cs++;
+                                        } else if (cs[0] == 'c') { // value in centimeters
+                                            limit_fill_z = divider_steps * 10.;
+                                            cs++;
+                                            if (cs[0] == 'm') // finish centimeters
+                                                cs++;
+                                        } else if (cs[0] == 'm') {
+                                            cs++;
+                                            if (cs[0] == 'm') { // value in the millimeters
+                                                limit_fill_z = divider_steps * 1.;
+                                                cs++;
+                                            } else {
+                                                limit_fill_z = divider_steps * 1000.;
+                                            }
+                                        }
+                                        limit_fill_z += fill_z;
+                                        divider_steps = 0; // limit_fill_z has already count
+                                    }
                                 }
-                            }
+                                if (cs[0] == '*') { // [R-zone] overall cycles - post [Z-zone]
+                                    cs++;
+                                    repeats = strtol(cs, &cs, 0);
+                                }
+                            } else
+                                divider_steps = 1;
+
                             if (divider_steps) { // if limit_fill_z does not setting by lenght method. Get count the layer id above model height
-                                if (fill_form == std::string::npos) {
-                                    divider_steps = floor(divider_steps);
+                                divider_steps = floor(divider_steps);
+                                if ((fill_form == std::string::npos) && (divider_steps > (1 + EPSILON))) {
                                     angle_add      *= divider_steps;
                                     shift_add      *= divider_steps;
                                     shift_dir      *= divider_steps;
@@ -412,11 +446,6 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
                                 int sdx      = std::max(0, idx - (int) object->layers().size());
                                 idx          = std::min(idx, (int) object->layers().size() - 1);
                                 limit_fill_z = object->get_layer(idx)->print_z + sdx * object->config().layer_height;
-                            }
-
-                            if (cs[0] == '*') { // [R-zone] overall cycles - post [Z-zone]
-                                cs++;
-                                repeats = strtol(cs, &cs, 0);
                             }
 
                             if (!repeats) {                  // if overall cycles = 0
