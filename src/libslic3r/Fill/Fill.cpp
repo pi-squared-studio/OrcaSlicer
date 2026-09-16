@@ -1699,6 +1699,7 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
         params.gyroid_optimized          = surface_fill.params.gyroid_optimized;
         params.smooth_factor             = surface_fill.params.smooth_factor;
 
+
 		// BBS
 		params.flow = surface_fill.params.flow;
 		params.extrusion_role = surface_fill.params.extrusion_role;
@@ -1707,6 +1708,7 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
         auto &region_config = layerm->region().config();
         params.config               = &region_config;
         params.pattern              = surface_fill.params.pattern;
+        params.pattern_mode         = surface_fill.params.pattern_mode;
         params.fill_order           = surface_fill.params.fill_order;
 
         // Orca: Checking the filling of a centered surface by drawing for each model parts
@@ -1916,7 +1918,8 @@ Polylines Layer::generate_sparse_infill_polylines_for_anchoring(FillAdaptive::Oc
         // Without the sparse extrusion role, the filler uses each surface's bounds
         // instead of the object's bounds, so bridge anchors shift away from printed infill.
         params.extrusion_role            = surface_fill.params.extrusion_role;
-        params.pattern_mode              = surface_fill.params.pattern_mode;
+        // Attention! The Hilbert curve pattern in this mode will not match to the pattern defined by the rotating infill templates.
+        // params.pattern_mode              = surface_fill.params.pattern_mode; 
 
         for (ExPolygon &expoly : surface_fill.expolygons) {
             // Orca: Match the per-body origin of make_fills() before generating physical anchors.
