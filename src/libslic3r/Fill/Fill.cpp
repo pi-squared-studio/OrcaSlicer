@@ -460,7 +460,7 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
                 }
             }
 
-            double negvalue = std::min(std::max((_negative ? (limit_fill_z - fill_z) : (fill_z - start_fill_z)) / (limit_fill_z - start_fill_z), 0.), 1.);
+            double negvalue = divider_steps ? 1. : std::min(std::max((_negative ? (limit_fill_z - fill_z) : (fill_z - start_fill_z)) / (limit_fill_z - start_fill_z), 0.), 1.);
 
             switch (fill_form) {
             case 0:  negvalue += (double) rand() / RAND_MAX - .5; break;                           // ^-joint, pseudorandom, disperse at middle line
