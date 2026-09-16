@@ -1716,13 +1716,7 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
         if (is_top_or_bottom) {
             params.center_of_surface_pattern = surface_fill.params.center_of_surface_pattern; // Orca: center of surface pattern
         }
-
-        //// Orca: dont adjust infills if rotation template is used
-        //params.dont_adjust |= f->is_templated = (surface_fill.surface.surface_type == stInternal && !params.config->sparse_infill_rotate_template.value.empty()) || 
-        //                                        (surface_fill.surface.surface_type == stInternalSolid && !params.config->solid_infill_rotate_template.value.empty());
-        //if (f->is_templated && surface_fill.params.pattern == ipHilbertCurve)
-        //    params.pattern_mode = 3;
-      
+     
         if( surface_fill.params.pattern == ipLockedZag ) {
 			params.locked_zag = true;
             params.infill_lock_depth = surface_fill.params.infill_lock_depth;
@@ -1918,8 +1912,10 @@ Polylines Layer::generate_sparse_infill_polylines_for_anchoring(FillAdaptive::Oc
         // Without the sparse extrusion role, the filler uses each surface's bounds
         // instead of the object's bounds, so bridge anchors shift away from printed infill.
         params.extrusion_role            = surface_fill.params.extrusion_role;
+        
         // Attention! The Hilbert curve pattern in this mode will not match to the pattern defined by the rotating infill templates.
-        // params.pattern_mode              = surface_fill.params.pattern_mode; 
+        // "Sparse plane-path anchors match the printed infill" test will generate an error on the Hilbert Curve
+        params.pattern_mode              = surface_fill.params.pattern_mode; 
 
         for (ExPolygon &expoly : surface_fill.expolygons) {
             // Orca: Match the per-body origin of make_fills() before generating physical anchors.
