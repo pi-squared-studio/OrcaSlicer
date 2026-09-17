@@ -104,8 +104,8 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
         double multiline_start = fixed_multiline;       // the initial position of the miltiline for the current range
         double multiline_add   = 0.;                    // additive for the miltiline step
         
-        double start_fill_z    = object->get_layer(0)->slice_z;
-        double limit_fill_z    = 0.;
+        double start_fill_z    = object->get_layer(0)->print_z;
+        double limit_fill_z    = start_fill_z;
         // The raft height, or 0 without a raft.
         const double print_z_offset = object->slicing_parameters().object_print_z_min + EPSILON;
         size_t fill_form       = std::string::npos;
@@ -117,7 +117,7 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
         line_width = line_width ? line_width : object->config().line_width;
 
         for (size_t i = 0; i <= layer_id; i++) {
-            double fill_z = object->get_layer(i)->slice_z;
+            double fill_z = object->get_layer(i)->print_z;
             
             if (limit_fill_z <= object->get_layer(i)->print_z + print_z_offset) {
 
@@ -436,11 +436,11 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
                             // Calculate the altitude when specifying the exact number of layers.
                             if (divider_steps) {
                                 divider_steps  = round(divider_steps);
-                                int e_layer    = i + (int) divider_steps - 1;
+                                int e_layer    = i + divider_steps;
                                 int m_layer    = object->layers().size() - 1;
                                 int idx        = std::min(e_layer, m_layer);
                                 int sdx        = std::max(e_layer - m_layer, 0);
-                                limit_fill_z   = object->get_layer(idx)->slice_z + sdx * object->config().layer_height.value;
+                                limit_fill_z   = object->get_layer(idx)->print_z + sdx * object->config().layer_height.value;
                             }
 
                             if (!repeats) {                  // if overall cycles = 0
