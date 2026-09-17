@@ -108,8 +108,8 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
         double limit_fill_z    = 0.;
         // The raft height, or 0 without a raft.
         const double print_z_offset = object->slicing_parameters().object_print_z_min + EPSILON;
-        auto fill_form         = std::string::npos;
-        bool is_negative         = false;
+        size_t fill_form       = std::string::npos;
+        bool is_negative       = false;
         // Vector of stop marks. "1" is the one-time running command, "2" is the dumb command
         // If the all values entire vector is unequal to 0, then stop the parsing from repeating.
         std::vector<size_t> stop(tk.size(), 0);
@@ -171,24 +171,24 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
                                 double shift_value(0.);
                                 is_dumb = false;
 
-                                if (coord_string.find(cs[0]) != std::string::npos) { // [XxYy-zone]
+                                if (coord_string.find(zone_mark) != std::string::npos) { // [XxYy-zone]
                                     cs++;
-                                    is_abs_shift = is_absolute(cs);
-                                    if (is_abs_shift) // absolute/relative
-                                        has_abs_shift = true;
 
                                     int y_sign = 0.;
                                     if (cs[0] == 'Y' || cs[0] == 'y') { // get diagonal
                                         cs++;
                                         y_sign = 1.;
-                                    }
-
-                                    if (cs[0] == '_' && (cs[1] == 'Y' || cs[1] == 'y')) { // get diagonal
-                                        cs+=2;
+                                    } else if (cs[0] == '_' && (cs[1] == 'Y' || cs[1] == 'y')) { // get diagonal
+                                        cs += 2;
                                         y_sign = -1.;
                                     }
 
+                                    is_abs_shift = is_absolute(cs);
+                                    if (is_abs_shift) // absolute/relative
+                                        has_abs_shift = true;
+
                                     if (cs[0] == '_') { // get value
+                                        cs++;
                                         shift_value = -strtod(cs, &cs);
                                     } else
                                         shift_value = strtod(cs, &cs);
@@ -433,10 +433,14 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
                                 repeats = strtol(cs, &cs, 0);
                             }
 
+                            // Calculate the altitude when specifying the exact number of layers.
                             if (divider_steps) {
-                                divider_steps = round(divider_steps);
-                                size_t idx   = std::min(i + (size_t) divider_steps - 1, object->layers().size() - 1);
-                                limit_fill_z = object->get_layer(idx)->print_z + EPSILON * 2;
+                                divider_steps  = round(divider_steps);
+                                int e_layer    = i + (int) divider_steps - 1;
+                                int m_layer    = object->layers().size() - 1;
+                                int idx        = std::min(e_layer, m_layer);
+                                int sdx        = std::max(e_layer - m_layer, 0);
+                                limit_fill_z   = object->get_layer(idx)->slice_z + sdx * object->config().layer_height.value;
                             }
 
                             if (!repeats) {                  // if overall cycles = 0
@@ -479,7 +483,7 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
             }
 
             params.angle = angle_start + angle_add * negvalue;
-            params.shift = (shift_start + (rotate_point_CW(fixed_infill_angle, shift_add) + rotate_point_CW(fixed_infill_angle + params.angle, shift_dir)) * divider_steps) / SCALING_FACTOR;
+            params.shift = (shift_start + (rotate_point_CW(fixed_infill_angle, shift_add) + rotate_point_CW(fixed_infill_angle + params.angle, shift_dir)) * negvalue) / SCALING_FACTOR;
             if (density_lin) {
                 double _ns     = 1. / density_start;
                 double _ne     = 1. / (density_start + density_lin);
