@@ -107,6 +107,7 @@ EGCodeExtrusionRole convert(Slic3r::ExtrusionRole role)
     case Slic3r::ExtrusionRole::erInternalInfill:              { return EGCodeExtrusionRole::InternalInfill; }
     case Slic3r::ExtrusionRole::erSolidInfill:                 { return EGCodeExtrusionRole::SolidInfill; }
     case Slic3r::ExtrusionRole::erTopSolidInfill:              { return EGCodeExtrusionRole::TopSolidInfill; }
+    case Slic3r::ExtrusionRole::erSubTopSolidInfill:           { return EGCodeExtrusionRole::SubTopSolidInfill; }
     case Slic3r::ExtrusionRole::erIroning:                     { return EGCodeExtrusionRole::Ironing; }
     case Slic3r::ExtrusionRole::erBridgeInfill:                { return EGCodeExtrusionRole::BridgeInfill; }
     case Slic3r::ExtrusionRole::erGapFill:                     { return EGCodeExtrusionRole::GapFill; }

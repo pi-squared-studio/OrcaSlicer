@@ -25,6 +25,7 @@ enum ExtrusionRole : uint8_t {
     erInternalInfill,
     erSolidInfill,
     erTopSolidInfill,
+    erSubTopSolidInfill,
     erBottomSurface,
     erIroning,
     erBridgeInfill,
