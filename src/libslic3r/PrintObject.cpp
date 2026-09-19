@@ -775,6 +775,9 @@ void PrintObject::prepare_infill()
     this->combine_infill();
     m_print->throw_if_canceled();
 
+    this->discover_sub_top_surfaces();
+    m_print->throw_if_canceled();
+
 #ifdef SLIC3R_DEBUG_SLICE_PROCESSING
     for (size_t region_id = 0; region_id < this->num_printing_regions(); ++ region_id) {
         for (const Layer *layer : m_layers) {
@@ -4541,7 +4544,7 @@ void PrintObject::discover_sub_top_surfaces()
     if (m_layers.size() < 2)
         return;
 
-    if (this->print()->default_region_config().sub_top_surface_pattern.value == ipCount)
+    if (this->print()->default_region_config().sub_top_surface_pattern.value == ipCount) // ipCount = default
         return;
 
     auto process_layer = [this](size_t idx_layer) {

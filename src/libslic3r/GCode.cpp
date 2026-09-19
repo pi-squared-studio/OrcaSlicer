@@ -5272,7 +5272,7 @@ void GCode::compute_farthest_point(const std::vector<LayerToPrint> &layers, int 
         return role == erExternalPerimeter;
     };
     auto is_fallback_role = [](ExtrusionRole role) -> bool {
-        return role == erInternalInfill || role == erSolidInfill || role == erTopSolidInfill;
+        return role == erInternalInfill || role == erSolidInfill || role == erTopSolidInfill || role == erSubTopSolidInfill;
     };
     auto is_candidate_support_role = [](ExtrusionRole role) -> bool {
         return role == erSupportMaterial || role == erSupportMaterialInterface || role == erSupportTransition;
@@ -7873,7 +7873,8 @@ bool GCode::_needSAFC(const ExtrusionPath &path)
 
     return std::any_of(std::begin(supported_patterns), std::end(supported_patterns), [&](const InfillPattern pattern) {
         return (this->on_first_layer() && this->config().bottom_surface_pattern == pattern) ||
-               ((path.role() == erSolidInfill  || path.role() == erSubTopSolidInfill) && this->config().internal_solid_infill_pattern == pattern) ||
+               (path.role() == erSolidInfill && this->config().internal_solid_infill_pattern == pattern) ||
+               (path.role() == erSubTopSolidInfill && this->config().sub_top_surface_pattern == pattern) ||
                (path.role() == erTopSolidInfill && this->config().top_surface_pattern == pattern);
     });
 }

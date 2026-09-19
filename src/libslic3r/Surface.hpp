@@ -113,7 +113,7 @@ public:
 	bool   is_internal() const { return ! this->is_external(); }
     bool   is_sub_top()  const { return this->surface_type == stSubTop; }
 	bool   is_solid()    const { return this->is_external() || this->surface_type == stInternalSolid || this->surface_type == stSubTop || this->surface_type == stInternalBridge; }
-	bool   is_solid_infill() const { return this->surface_type == stInternalSolid; }
+	bool   is_solid_infill() const { return this->surface_type == stInternalSolid || this->surface_type == stSubTop; } // check is_sub_top() first
 };
 
 typedef std::vector<Surface> Surfaces;

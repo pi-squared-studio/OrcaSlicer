@@ -906,7 +906,6 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
 
                 if (surface.is_solid()) {
                     params.density = 100.f;
-                    params.pattern = region_config.internal_solid_infill_pattern.value;
                     if (surface.is_external() && !is_bridge) {
                         if (surface.is_top()) {
                             params.pattern = region_config.top_surface_pattern.value;
@@ -916,8 +915,10 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                             params.pattern = region_config.bottom_surface_pattern.value;
                             params.density = float(region_config.bottom_surface_density);
                         }
-                    } else if (surface.is_sub_top() && region_config.sub_top_surface_pattern.value != ipCount) {
-                        params.pattern = region_config.sub_top_surface_pattern.value;
+                    } else if (surface.is_solid_infill()) {
+                        params.pattern = (surface.is_sub_top() && (region_config.sub_top_surface_pattern.value != ipCount)) ?
+                                             region_config.sub_top_surface_pattern.value :
+                                             region_config.internal_solid_infill_pattern.value;
                     } else {
                         if (region_config.top_surface_pattern == ipMonotonic || region_config.top_surface_pattern == ipMonotonicLine)
                             params.pattern = ipMonotonic;
@@ -936,12 +937,11 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                 } else if (surface.is_solid()) {
                     if (surface.is_top()) {
                         params.extrusion_role = erTopSolidInfill;
-                    } else if (surface.is_sub_top() && region_config.sub_top_surface_pattern.value != ipCount) {
-                        params.extrusion_role = erSubTopSolidInfill;
                     } else if (surface.is_bottom()) {
                         params.extrusion_role = erBottomSurface;
                     } else {
-                        params.extrusion_role = erSolidInfill;
+                        params.extrusion_role = (surface.is_sub_top() && (region_config.sub_top_surface_pattern.value != ipCount)) ?
+                                                    erSubTopSolidInfill : erSolidInfill;
                     }
                 }
                 if (params.extrusion_role == erTopSolidInfill)
@@ -959,7 +959,7 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                         params.fill_order = region_config.bottom_surface_fill_order.value;
                 }
                 // Orca: apply fill multiline only for sparse infill
-                params.multiline = params.extrusion_role == erInternalInfill ? int(region_config.fill_multiline) : 1;
+                params.multiline = (params.extrusion_role == erInternalInfill || params.extrusion_role == erSubTopSolidInfill) ? int(region_config.fill_multiline) : 1;
 
                 // Pass through gyroid_optimized only when the effective pattern is Gyroid,
                 // so non-Gyroid fills do not differ in SurfaceFillParams by an irrelevant flag
@@ -1015,7 +1015,7 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                     params.role_speed = region_config.sparse_infill_speed.get_at(layer.get_extruder_id(params.extruder));
                 else if (params.extrusion_role == erTopSolidInfill)
                     params.role_speed = region_config.top_surface_speed.get_at(layer.get_extruder_id(params.extruder));
-                else if (params.extrusion_role == erSolidInfill)
+                else if (params.extrusion_role == erSolidInfill || params.extrusion_role == erSubTopSolidInfill)
                     params.role_speed = region_config.internal_solid_infill_speed.get_at(layer.get_extruder_id(params.extruder));
 				// Calculate flow spacing for infill pattern generation.
 		        if (surface.is_solid() || is_bridge) {

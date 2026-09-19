@@ -279,7 +279,7 @@ static t_config_enum_values s_keys_map_InfillPattern {
     { "hilbertcurve", ipHilbertCurve },
     { "archimedeanchords", ipArchimedeanChords },
     { "octagramspiral", ipOctagramSpiral },
-    { "default", ipCount } // used for sub_top infill
+    { "default", ipCount } // used for sub_top infill as default
 };
 CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(InfillPattern)
 
@@ -2320,7 +2320,7 @@ void PrintConfigDef::init_fff_params()
     def->enum_labels = def_top_fill_pattern->enum_labels;
     def->enum_values.insert(def->enum_values.begin(), "default");
     def->enum_labels.insert(def->enum_labels.begin(), L("Solid default"));
-    def->set_default_value(new ConfigOptionEnum<InfillPattern>(ipCount));
+    def->set_default_value(new ConfigOptionEnum<InfillPattern>(ipCount)); // ipCount = default
 
     def = this->add("top_surface_density", coPercent);
     def->label = L("Top surface density");

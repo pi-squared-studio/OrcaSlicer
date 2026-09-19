@@ -78,6 +78,7 @@ inline bool is_infill(ExtrusionRole role)
         || role == erInternalInfill
         || role == erSolidInfill
         || role == erTopSolidInfill
+        || role == erSubTopSolidInfill
         || role == erBottomSurface
         || role == erIroning;
 }
@@ -93,6 +94,7 @@ inline bool is_solid_infill(ExtrusionRole role)
         || role == erInternalBridgeInfill
         || role == erSolidInfill
         || role == erTopSolidInfill
+        || role == erSubTopSolidInfill
         || role == erBottomSurface
         || role == erIroning;
 }
