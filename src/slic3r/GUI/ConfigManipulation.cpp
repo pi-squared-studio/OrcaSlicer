@@ -839,9 +839,6 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
                                         config->opt_string("solid_infill_rotate_template") != "";
     toggle_line("separated_infills", is_internal_infill_separable);
 
-    // BBL + Orca: sub-top infill
-    toggle_line("sub_top_surface_pattern", config->opt_int("top_shell_layers") > 1);
-
     // Fill order is only meaningful for the center-based surface fill patterns; hide it otherwise.
     auto is_centered_fill = [](InfillPattern p) { return p == ipConcentric || p == ipSpiralInset || p == ipArchimedeanChords || p == ipOctagramSpiral; };
     toggle_line("top_surface_fill_order", has_top_shell && is_centered_fill(config->opt_enum<InfillPattern>("top_surface_pattern")));
