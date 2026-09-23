@@ -465,6 +465,11 @@ void PrintObject::make_perimeters()
     m_print->set_status(15, L("Generating walls"));
     BOOST_LOG_TRIVIAL(info) << "Generating walls..." << log_memory_info();
 
+    if (m_print->default_region_config().sub_top_surface_pattern != ipCount) {
+        this->discover_sub_top_surfaces(true);
+        m_print->throw_if_canceled();
+    }
+
     // Revert the typed slices into untyped slices.
     if (m_typed_slices) {
         for (Layer *layer : m_layers) {
@@ -1830,7 +1835,8 @@ void PrintObject::detect_surfaces_type()
                         const ExPolygons T = union_ex(to_expolygons(top));
                         // Walls are laid out on spacing, not width; and only_one_wall_top leaves a single wall over
                         // a top surface, which is exactly the situation handled here.
-                        const int    wall_loops = region_config.only_one_wall_top.value ? std::min(region_config.wall_loops.value, 1)
+                        const int wall_loops    = (region_config.top_one_wall_type.value != TopOneWallType::None) ?
+                                                      std::min(region_config.wall_loops.value, 1)
                                                                                         : region_config.wall_loops.value;
                         const double wall_band  = wall_loops <= 0 ? 0. :
                             double(layerm->flow(frExternalPerimeter).scaled_width()) +
@@ -4538,7 +4544,7 @@ void PrintObject::combine_infill()
 // can be large while no part of them is wide enough to matter.
 static constexpr double SUB_TOP_MIN_TOP_EROSION_MM = 1.5;
 
-void PrintObject::discover_sub_top_surfaces()
+void PrintObject::discover_sub_top_surfaces(bool is_preprocess)
 {
     BOOST_LOG_TRIVIAL(trace) << "discover_sub_top_surfaces()";
     if (m_layers.size() < 2)
@@ -4547,16 +4553,32 @@ void PrintObject::discover_sub_top_surfaces()
     if (this->print()->default_region_config().sub_top_surface_pattern.value == ipCount) // ipCount = default
         return;
 
-    auto process_layer = [this](size_t idx_layer) {
+    auto process_layer = [this](size_t idx_layer, bool is_preprocess) {
         m_print->throw_if_canceled();
-        const Layer* upper = m_layers[idx_layer + 1];
         Layer* layer       = m_layers[idx_layer];
+        if (!layer->upper_layer)
+            return;
+        const Layer* upper = layer->upper_layer;
 
         ExPolygons top_mask;
-        for (const LayerRegion* upper_region : upper->regions())
-            for (const Surface& s : upper_region->fill_surfaces.surfaces)
-                if (s.surface_type == stTop)
-                    top_mask.emplace_back(s.expolygon);
+        if (is_preprocess) {
+            //ExPolygons upper_slices = diff_ex(layer->lslices, upper->lslices, ApplySafetyOffset::Yes);
+            //for (const ExPolygon& exp : upper_slices)
+            //    top_mask.emplace_back(exp);
+
+            ExPolygons sub_slices = !upper->upper_layer ? upper->lslices : diff_ex(layer->lslices, upper->lslices, ApplySafetyOffset::Yes);
+            for (const ExPolygon& exp : sub_slices)
+                top_mask.emplace_back(exp);
+            //if (!upper->upper_layer)
+            //    for (const LayerRegion* upper_region : upper->regions())
+            //        for (const Surface& s : upper_region->slices.surfaces)
+            //            top_mask.emplace_back(s.expolygon);
+        } else {
+            for (const LayerRegion* upper_region : upper->regions())
+                for (const Surface& s : upper_region->fill_surfaces.surfaces)
+                    if (s.surface_type == stTop)
+                        top_mask.emplace_back(s.expolygon);
+        }
         if (top_mask.empty())
             return;
 
@@ -4588,21 +4610,36 @@ void PrintObject::discover_sub_top_surfaces()
             const float min_width = float(layerm->flow(frSolidInfill).scaled_spacing());
             // A claimed island keeps its geometry and every other field, only its type changes, so
             // retype in place rather than rebuilding the collection.
-            for (Surface& surface : layerm->fill_surfaces.surfaces) {
-                if (surface.surface_type != stInternalSolid)
-                    continue;
-                // Trim the mask to the island first, so one island does not have to face the whole
-                // layer's top geometry. Opening then drops what only grazes the mask: an island is
-                // claimed on real overlap, not on a shared edge.
-                const BoundingBox island_bbox = get_extents(surface.expolygon).inflated(SCALED_EPSILON);
-                Polygons local_mask;
-                for (size_t i = 0; i < top_mask.size(); ++i)
-                    if (top_extents[i].overlap(island_bbox))
-                        append(local_mask, ClipperUtils::clip_clipper_polygons_with_subject_bbox(top_mask[i], island_bbox));
-                if (!local_mask.empty() &&
-                    !opening_ex(intersection_ex(surface.expolygon, local_mask, ApplySafetyOffset::Yes), 0.5f * min_width).empty())
-                    surface.surface_type = stSubTop;
+
+            if (is_preprocess) {
+                for (Surface& surface : layerm->slices.surfaces) {
+                    const BoundingBox island_bbox = get_extents(surface.expolygon).inflated(SCALED_EPSILON);
+                    Polygons local_mask;
+                    for (size_t i = 0; i < top_mask.size(); ++i)
+                        if (top_extents[i].overlap(island_bbox))
+                            append(local_mask, ClipperUtils::clip_clipper_polygons_with_subject_bbox(top_mask[i], island_bbox));
+                    if (!local_mask.empty() &&
+                        !opening_ex(intersection_ex(surface.expolygon, local_mask, ApplySafetyOffset::Yes), 0.5f * min_width).empty())
+                        surface.surface_type = stSubTop;
+                }
+            } else {
+                for (Surface& surface : layerm->fill_surfaces.surfaces) {
+                    if (!(surface.surface_type == stInternalSolid || surface.surface_type == stSubTop))
+                        continue;
+                    // Trim the mask to the island first, so one island does not have to face the whole
+                    // layer's top geometry. Opening then drops what only grazes the mask: an island is
+                    // claimed on real overlap, not on a shared edge.
+                    const BoundingBox island_bbox = get_extents(surface.expolygon).inflated(SCALED_EPSILON);
+                    Polygons local_mask;
+                    for (size_t i = 0; i < top_mask.size(); ++i)
+                        if (top_extents[i].overlap(island_bbox))
+                            append(local_mask, ClipperUtils::clip_clipper_polygons_with_subject_bbox(top_mask[i], island_bbox));
+                    if (!local_mask.empty() &&
+                        !opening_ex(intersection_ex(surface.expolygon, local_mask, ApplySafetyOffset::Yes), 0.5f * min_width).empty())
+                        surface.surface_type = stSubTop;
+                }
             }
+
         }
     };
 
@@ -4614,9 +4651,9 @@ void PrintObject::discover_sub_top_surfaces()
         if (num_to_process <= parity)
             continue;
         const size_t count = (num_to_process - parity + 1) / 2;
-        tbb::parallel_for(tbb::blocked_range<size_t>(0, count), [&process_layer, parity](const tbb::blocked_range<size_t>& range) {
+        tbb::parallel_for(tbb::blocked_range<size_t>(0, count), [&process_layer, parity, is_preprocess](const tbb::blocked_range<size_t>& range) {
             for (size_t k = range.begin(); k < range.end(); ++k)
-                process_layer(parity + 2 * k);
+                process_layer(parity + 2 * k, is_preprocess);
         });
     }
 }
