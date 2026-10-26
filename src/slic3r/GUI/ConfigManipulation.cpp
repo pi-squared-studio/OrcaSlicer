@@ -908,11 +908,11 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
     toggle_field("bottom_layer_direction", has_bottom_shell);
 
     toggle_line("top_surface_expansion", has_top_shell);
-    toggle_line("top_surface_expansion_margin", has_top_shell);
-    bool has_top_surface_expansion = config->opt_float("top_surface_expansion") > 0;
-    toggle_field("top_surface_expansion_margin", has_top_surface_expansion);
-    toggle_line("top_surface_expansion_direction", has_top_shell);
-    toggle_field("top_surface_expansion_direction", has_top_surface_expansion);
+    //toggle_line("top_surface_expansion_margin", has_top_shell);
+    //bool has_top_surface_expansion = config->opt_float("top_surface_expansion") > 0;
+    //toggle_field("top_surface_expansion_margin", has_top_surface_expansion);
+    //toggle_line("top_surface_expansion_direction", has_top_shell);
+    //toggle_field("top_surface_expansion_direction", has_top_surface_expansion);
 
     // Orca: Archimedean Chords and Octagram Spiral are the centered surface patterns that the
     // pattern-centering feature acts on.
@@ -1257,7 +1257,7 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
     toggle_line("top_one_wall_type", has_top_shell_layers);
     bool has_one_wall = has_top_shell_layers && have_perimeters && config->opt_enum<TopOneWallType>("top_one_wall_type") != TopOneWallType::None;
     toggle_line("min_width_top_surface", has_one_wall || ((config->opt_float("min_length_factor") > 0.5f) && have_arachne)); // 0.5 is default value
-    toggle_line("top_surface_inset", has_one_wall);
+    // toggle_line("top_surface_inset", has_one_wall);
 
     for (auto el : { "hole_to_polyhole_threshold", "hole_to_polyhole_twisted", "hole_to_polyhole_max_edges" })
         toggle_line(el, config->opt_bool("hole_to_polyhole"));

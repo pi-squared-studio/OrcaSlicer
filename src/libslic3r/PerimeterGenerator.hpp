@@ -155,7 +155,7 @@ public:
     void        process_arachne();
 
     inline double get_inset(int loop_number, double perimeter_spacing, double ext_perimeter_spacing);
-
+    void        split_top_surfaces(ExPolygons &top_fills, ExPolygons &fill_clip, double bridge_overlap) const;
     void        add_gap_filling(ExPolygons& gaps); 
     void        add_infill_contour(ExPolygons& infill_contour, ExPolygons& top_expolygons, ExPolygons& infill_contour_by_one_wall, double insert, double min_spacing);
     void        add_infill_zero_contour(ExPolygons& infill_contour); 

@@ -44,9 +44,9 @@
 #include "SurfaceCollection.hpp"
 #include "SVG.hpp"
 
-// #define EXTRA_PERIM_DEBUG_FILES
-#define PERIMETERS_DEBUG
-#define BLOCKS_TO_DELETE
+//#define EXTRA_PERIM_DEBUG_FILES
+//#define PERIMETERS_DEBUG
+//#define BLOCKS_TO_DELETE
 
 static const int overhang_sampling_number = 6;
 static const double narrow_loop_length_threshold = 10;
@@ -830,6 +830,44 @@ static Polygons walls_footprint(const Arachne::VariableWidthLines &walls)
                 append(footprint, offset(Polyline(a.p, b.p), float(width) / 2.f));
         }
     return union_(footprint);
+}
+
+void PerimeterGenerator::split_top_surfaces(ExPolygons &top_expolygons, ExPolygons &fill_clip, double bridge_overlap) const {
+
+    const double ext_perimeter_half_spacing = this->ext_perimeter_flow.scaled_spacing() * 0.5; // reference const: = ext_perimeter_spacing / 2.
+
+    // set the clip to a virtual "second perimeter"
+    ExPolygons innner_contour = offset_ex(fill_clip, -ext_perimeter_half_spacing);
+    
+    // Orca: check for more top expolygons
+    if (this->upper_slices != nullptr) {
+        ExPolygons upper_slices = union_ex(*this->upper_slices);
+
+        // get the real top surface
+        double nozzle_diameter       = this->print_config->nozzle_diameter.get_at(this->config->outer_wall_filament_id - 1);
+        double top_surface_expansion = scale_(this->config->top_surface_expansion.get_abs_value(this->config->inner_wall_line_width.get_abs_value(nozzle_diameter)));
+        top_expolygons = offset_ex(diff_ex(innner_contour, upper_slices, ApplySafetyOffset::Yes), top_surface_expansion);
+
+        // BBS: check whether surface be bridge or not
+        // ExPolygons bridge_checker;
+        if (this->lower_slices != NULL) {
+            // BBS: get the Polygons below the polygon this layer
+            ExPolygons lower_slices   = union_ex(*this->lower_slices);
+            ExPolygons lower_polygons = diff_ex(innner_contour, lower_slices, ApplySafetyOffset::Yes);
+            lower_polygons            = offset_ex(lower_polygons, bridge_overlap);
+
+            // BBS: Check which piece the bridge belongs to. If the bridge has a connection with the non-top area, it should belong to
+            // the non-top area, otherwise it should belong to the top area to get a better surface.
+            if (!lower_polygons.empty())
+                top_expolygons = diff_ex(top_expolygons, lower_polygons, ApplySafetyOffset::Yes);
+        }
+    }
+
+    // store new infill polygon
+    fill_clip = diff_ex(fill_clip, offset_ex(top_expolygons, -ext_perimeter_half_spacing), ApplySafetyOffset::Yes);
+
+    // get the enlarged top surface, by using inner_polygons instead of upper_slices, and clip it for it to be exactly the polygons to fill.
+    top_expolygons = intersection_ex(top_expolygons, innner_contour, ApplySafetyOffset::Yes);
 }
 
 // Port "extra perimeters on overhangs" from PrusaSlicer. Original author: PavelMikus pavel.mikus.mail@seznam.cz
@@ -1790,74 +1828,20 @@ void PerimeterGenerator::process_classic()
 
                         // BBS: get the Polygons upper the polygon this layer
                         Polygons upper_polygons_series_clipped = ClipperUtils::clip_clipper_polygons_with_subject_bbox(*this->upper_slices, last_box);
-
-                        // set the clip to a virtual "second perimeter"
-                        infill_contour_by_one_wall = offset_ex(last, -ext_perimeter_half_spacing);
+                        ExPolygons upper_expolygons            = diff_ex(last, upper_polygons_series_clipped, ApplySafetyOffset::Yes);
                         
-                        if (should_enable_top_one_wall(infill_contour_by_one_wall, to_expolygons(upper_polygons_series_clipped))) {
-                            // get the real top surface
-                            double top_surface_expansion = scale_(this->config->top_surface_expansion.value);
-                            ExPolygons top_polygons_temp = offset_ex(diff_ex(last, upper_polygons_series_clipped, ApplySafetyOffset::Yes), perimeter_spacing + top_surface_expansion); // offset_top_surface
-                         
-                            // get the not-top surface, from the "real top" but enlarged by external_infill_margin (and the min_width_top_surface we removed a bit before)
-                            ExPolygons inner_polygons = diff_ex(last, offset_ex(top_polygons_temp, -ext_perimeter_half_width), ApplySafetyOffset::Yes);
-                        
-                            // BBS: check whether surface be bridge or not
-                            ExPolygons bridge_checker;
-                            if (this->lower_slices != NULL) {
-                                
-                                // BBS: get the Polygons below the polygon this layer
-                                Polygons lower_polygons_series_clipped = ClipperUtils::clip_clipper_polygons_with_subject_bbox(*this->lower_slices, last_box);
-                                double bridge_offset = std::max(ext_perimeter_spacing, perimeter_width);
-                                bridge_checker       = offset_ex(diff_ex(last, lower_polygons_series_clipped, ApplySafetyOffset::Yes), 1.5 * bridge_offset);
+                        if (upper_expolygons.size() || should_enable_top_one_wall(infill_contour_by_one_wall, upper_expolygons)) {
 
-                                // BBS: Check which piece the bridge belongs to. If the bridge has a connection with the non-top area, it should belong to the non-top area, otherwise it should belong to the top area to get a better surface.
-                                if (!bridge_checker.empty() && !intersection_ex(bridge_checker, inner_polygons, ApplySafetyOffset::Yes).empty())
-                                    inner_polygons = union_ex(inner_polygons, bridge_checker, true);
-                            }
-
-                            // get the enlarged top surface, by using inner_polygons instead of upper_slices, and clip it for it to be exactly the polygons to fill.
-                            top_polygons_temp = intersection_ex(top_polygons_temp, infill_contour_by_one_wall, ApplySafetyOffset::Yes);
-                        
-                            // increase by half peri the inner space to fill the frontier between last and stored.
-                            top_expolygons = union_ex(top_expolygons, top_polygons_temp, true);
-
-                            // store new infill polygon
-                            last = intersection_ex(inner_polygons, last, ApplySafetyOffset::Yes);
-
-                            if (top_expolygons.size())
-                                apply_one_wall_top = true;
-
-                            
-                            // BBS: refer to superslicer
-                            // store surface for top infill if only_one_wall_top
-                            /*
-                            if (i != loop_number && !surface.is_bridge() && this->upper_slices != NULL) {
-                                if (top_fill_replaces_inner_walls(*this->config)) {
-                                    // ORCA: take the top fill and the keep-out region but leave `last` as the real geometry,
-                                    // so the onion follows it and the walls over the top are reduced in one step below.
-                                    if (top_expolygons.size()) {
-                                        apply_one_wall_top = !top_expolygons.empty();
-                                        one_wall_top_region = infill_contour_by_one_wall;
-                                    }
-                                }
-                            }
-                            */
+                            // set the clip to a virtual "second perimeter"
+                            infill_contour_by_one_wall = offset_ex(last, -ext_perimeter_half_spacing);
+                            int wall_loops             = this->config->wall_loops.value;
+                            double int_wall_thickness  = std::max(wall_loops + surface.extra_perimeters - 2, 0) * perimeter_spacing;
+                            double ext_wall_thickness  = wall_loops ? ext_perimeter_spacing : 0.;
+                            split_top_surfaces(top_expolygons, last, ext_wall_thickness + int_wall_thickness);
 
                             //if (has_gap_fill)
                             //    last = union_ex(last,temp_gap);
-                        
-                            //{
-                            //    std::stringstream stri;
-                            //    stri << this->layer->id() << "_1_"<< i <<"_only_one_peri"<< ".svg";
-                            //    SVG svg(stri.str());
-                            //    svg.draw(to_polylines(top_expolygons), "green");
-                            //    svg.draw(to_polylines(inner_polygons), "yellow");
-                            //    svg.draw(to_polylines(top_polygons), "cyan");
-                            //    svg.draw(to_polylines(oldLast), "orange");
-                            //    svg.draw(to_polylines(last), "red");
-                            //    svg.Close();
-                            //}
+
                         }
                     }
                 }
@@ -1868,6 +1852,9 @@ void PerimeterGenerator::process_classic()
                 	break;
                 }
             }
+
+            if (!top_expolygons.size())
+                split_top_surfaces(top_expolygons, last, ext_perimeter_half_spacing);
 
 #ifdef BLOCKS_TO_DELETE
             // ORCA: only_one_wall_top reduction - drop the inner walls (depth > 0) running over the top surface and
@@ -2120,6 +2107,7 @@ void PerimeterGenerator::process_classic()
             if (! entities.empty())
                 this->loops->append(entities);
 
+
             // store final infill contour
             infill_contour = offset_ex(last, -perimeter_half_spacing);
 
@@ -2297,21 +2285,12 @@ void PerimeterGenerator::add_infill_contour(ExPolygons&   infill_contour,
                                             double        insert,
                                             double        min_spacing)
 {   
+    const int wall_loops           = this->config->wall_loops.value;
+    const int inner_wall_loops     = std::max(wall_loops - 1, 0);
     const double perimeter_spacing = this->perimeter_flow.scaled_spacing();
     
     infill_contour = union_ex(infill_contour);
     top_expolygons = union_ex(top_expolygons);
-    
-    // Orca: check for more top expolygons
-    if (this->upper_slices != nullptr) {
-        ExPolygons more_top_expolygons = diff_ex(infill_contour, *this->upper_slices, ApplySafetyOffset::Yes);
-        if (more_top_expolygons.size()) {
-            more_top_expolygons = intersection_ex(offset_ex(more_top_expolygons, perimeter_spacing), infill_contour, ApplySafetyOffset::Yes);
-            infill_contour      = diff_ex(infill_contour, more_top_expolygons, ApplySafetyOffset::Yes);
-            for (ExPolygon e : more_top_expolygons)
-                top_expolygons.push_back(std::move(e));
-        }
-    }
 
     if (offset_ex(infill_contour, -min_spacing).empty())
         infill_contour.clear(); // Infill region is too small, so let's filter it out.
@@ -2328,43 +2307,39 @@ void PerimeterGenerator::add_infill_contour(ExPolygons&   infill_contour,
             h.simplify(m_scaled_resolution);
     }
 
-    append(*this->fill_no_overlap, offset2_ex(infill_contour, -min_spacing, min_spacing));
+    append(*this->fill_no_overlap, opening_ex(infill_contour, min_spacing));
 
     double top_insert = this->config->top_bottom_infill_wall_overlap.get_abs_value(insert);
-
     insert = (this->layer_id == 0 || this->upper_slices == nullptr) ? top_insert : this->config->infill_wall_overlap.get_abs_value(insert);
-
     infill_contour = offset_ex(infill_contour, insert);
 
     if (!top_expolygons.empty()) {
         
         // BBS: get the Polygons upper the polygon this layer
-        infill_contour = diff_ex(infill_contour, top_expolygons, ApplySafetyOffset::Yes);
+        infill_contour = offset2_ex(diff_ex(infill_contour, top_expolygons, ApplySafetyOffset::Yes), -min_spacing, min_spacing);
         
         if (this->upper_slices != nullptr) {
-            
-            double top_surface_expansion = scale_(this->config->top_surface_expansion.value);
-            double offset_top_surface = this->config->top_surface_inset.value * 0.01 * perimeter_spacing;
+            ExPolygons top_to_offset = intersection_ex(top_expolygons, *this->upper_slices, ApplySafetyOffset::Yes);
+            top_expolygons           = diff_ex(offset_ex(top_expolygons, top_insert), *this->upper_slices, ApplySafetyOffset::Yes);
 
-            ExPolygons separator     = offset_ex(*this->upper_slices, -offset_top_surface - top_surface_expansion);
-            ExPolygons top_to_offset = intersection_ex(top_expolygons, separator, ApplySafetyOffset::Yes);
-            top_expolygons = diff_ex(offset_ex(top_expolygons, top_insert), separator, ApplySafetyOffset::Yes);
-            
-            if (top_to_offset.size())
-                add_gap_filling(top_to_offset);
+            for (ExPolygon& e : top_to_offset)
+                top_expolygons.push_back(std::move(e));
 
-            for (ExPolygon e : top_expolygons)
+            //if (top_to_offset.size())
+            //    add_gap_filling(top_to_offset);
+
+            for (ExPolygon& e : opening_ex(union_ex(top_expolygons), min_spacing))
                 infill_contour.push_back(std::move(e));
-        } 
+        }
     }
 
-    for (ExPolygon& ex : union_ex(infill_contour)) {
+    for (ExPolygon& ex : infill_contour) {
         ex.contour.simplify(m_scaled_resolution);
         for (Polygon& h : ex.holes)
             h.simplify(m_scaled_resolution);
     }
 
-    this->fill_surfaces->append(offset2_ex(infill_contour, -min_spacing, min_spacing), stInternal);
+    this->fill_surfaces->append(infill_contour, stInternal);
 }
 
 void PerimeterGenerator::add_infill_zero_contour(ExPolygons& infill_contour) {
@@ -3399,6 +3374,7 @@ bool PerimeterGenerator::should_enable_top_one_wall(const ExPolygons& original_e
 {
     if (config->wall_loops == 0)
         return true;
+
     double perimeter_width       = this->perimeter_flow.scaled_width();
     double ext_perimeter_spacing = this->ext_perimeter_flow.scaled_spacing();
 
