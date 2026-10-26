@@ -1566,7 +1566,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionInt, top_shell_layers))
     ((ConfigOptionFloat, top_shell_thickness))
     ((ConfigOptionInt, top_color_penetration_layers))
-    ((ConfigOptionFloat, top_surface_expansion))
+    ((ConfigOptionFloatOrPercent, top_surface_expansion))
     //((ConfigOptionFloat, top_surface_expansion_margin))
     //((ConfigOptionEnum<TopSurfaceExpansionDirection>, top_surface_expansion_direction))
 
