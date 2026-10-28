@@ -4581,7 +4581,10 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
 
         CalibPressureAdvanceLine pa_test(this);
 
-        auto fast_speed = CalibPressureAdvance::find_optimal_PA_speed(print.full_print_config(), pa_test.line_width(), pa_test.height_layer());
+        // Cap the speed by the volumetric speed of the filament the test prints with, selected above.
+        const Extruder *pa_filament = m_writer.filament();
+        auto fast_speed = CalibPressureAdvance::find_optimal_PA_speed(print.full_print_config(), pa_test.line_width(), pa_test.height_layer(),
+                                                                      int(pa_filament->extruder_id()), pa_filament->config_index());
         auto slow_speed = std::max(10.0, fast_speed / 10.0);
         if (fast_speed < slow_speed + 5)
             fast_speed = slow_speed + 5;
@@ -6751,6 +6754,9 @@ LayerResult GCode::process_layer(
             break;
         }
         case CalibMode::Calib_Temp_Tower: {
+            // Name the tool printing the tower: on a multi-tool printer a bare M104 goes to
+            // whichever tool the firmware considers active.
+            const int tool = m_writer.filament() ? static_cast<int>(m_writer.filament()->id()) : -1;
             // ORCA-Belt: the sectioned variant prints each temperature as its
             // own object in native belt orientation, with the temperature
             // encoded in the object name ("temp_230") — step per object
@@ -6759,9 +6765,9 @@ LayerResult GCode::process_layer(
             if (m_config.belt_printer.value &&
                 sscanf(layer.object()->model_object()->name.c_str(), "temp_%d", &sectioned_temp) == 1 &&
                 sectioned_temp > 0) {
-                gcode += writer().set_temperature(static_cast<unsigned int>(sectioned_temp));
+                gcode += writer().set_temperature(static_cast<unsigned int>(sectioned_temp), false, tool);
             } else {
-                gcode += writer().set_temperature(this->interpolate_value_across_layers(static_cast<float>(print.calib_params().start), static_cast<float>(print.calib_params().end), 5.0f));
+                gcode += writer().set_temperature(this->interpolate_value_across_layers(static_cast<float>(print.calib_params().start), static_cast<float>(print.calib_params().end), 5.0f), false, tool);
             }
             break;
         }

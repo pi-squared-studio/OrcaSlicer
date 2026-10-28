@@ -469,6 +469,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/PresetComboBoxes.hpp
     GUI/PresetHints.cpp
     GUI/PresetHints.hpp
+    GUI/PrimitiveSizeDialog.cpp
+    GUI/PrimitiveSizeDialog.hpp
     GUI/PrinterCloudAuthDialog.cpp
     GUI/PrinterCloudAuthDialog.hpp
     GUI/Printer/PrinterFileSystem.cpp
@@ -744,8 +746,12 @@ set(SLIC3R_GUI_SOURCES
     Utils/PaintCLI.hpp
     Utils/CalibUtils.cpp
     Utils/CalibUtils.hpp
+    Utils/CloudDeleteQueue.cpp
+    Utils/CloudDeleteQueue.hpp
     Utils/ColorSpaceConvert.cpp
     Utils/ColorSpaceConvert.hpp
+    Utils/CrealityCfs.cpp
+    Utils/CrealityCfs.hpp
     Utils/CrealityPrint.cpp
     Utils/CrealityPrint.hpp
     Utils/CrealityPrintAgent.cpp
