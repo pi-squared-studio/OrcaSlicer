@@ -793,6 +793,8 @@ void PrintObject::prepare_infill()
     this->combine_infill();
     m_print->throw_if_canceled();
 
+    // defines the first continuous layer under the top surface
+    // ensures reliable anchoring of the perimeters if they are attached to a sparse infill
     this->discover_sub_top_surfaces();
     m_print->throw_if_canceled();
 
@@ -1749,7 +1751,7 @@ bool PrintObject::invalidate_state_by_config_options(
             assert(old_density && new_density);
             if (is_approx(old_density->value, 0.) || is_approx(new_density->value, 0.))
                 steps.emplace_back(posPerimeters);
-            steps.emplace_back(posInfill);
+            steps.emplace_back(posPrepareInfill);
         } else if (opt_key == "top_surface_expansion") {
             // ORCA: without the expansion the top fill never reaches the space freed by top_one_wall_type, so the
             // walls over top surfaces are kept. Only crossing zero matters; posPerimeters cascades to posPrepareInfill.
@@ -5121,11 +5123,14 @@ void PrintObject::discover_sub_top_surfaces()
 
         for (LayerRegion *layerm : layer->m_regions) {
             const float min_width = float(layerm->flow(frSolidInfill).scaled_spacing());
+            ExPolygons crop_mask = layerm->fill_no_overlap_expolygons;
             // A claimed island keeps its geometry and every other field, only its type changes, so
             // retype in place rather than rebuilding the collection.
+
+            Surfaces new_surfaces;
             for (Surface &surface : layerm->fill_surfaces.surfaces) {
-                if (surface.surface_type != stInternalSolid)
-                    continue;
+                //if (surface.surface_type != stInternalSolid)
+                //    continue;
                 // Trim the mask to the island first, so one island does not have to face the whole
                 // layer's top geometry. Opening then drops what only grazes the mask: an island is
                 // claimed on real overlap, not on a shared edge.
@@ -5134,10 +5139,22 @@ void PrintObject::discover_sub_top_surfaces()
                 for (size_t i = 0; i < top_mask.size(); ++ i)
                     if (top_extents[i].overlap(island_bbox))
                         append(local_mask, ClipperUtils::clip_clipper_polygons_with_subject_bbox(top_mask[i], island_bbox));
-                //if (! local_mask.empty() &&
-                //    ! opening_ex(intersection_ex(surface.expolygon, local_mask, ApplySafetyOffset::Yes), 0.5f * min_width).empty())
-                //    surface.surface_type = stSubTop;
+                if (! local_mask.empty() && ! opening_ex(intersection_ex(surface.expolygon, local_mask, ApplySafetyOffset::Yes), 0.5f * min_width).empty()) {
+                    int number_of_walls = layerm->m_region->config().wall_loops; // number of internal walls, clamped to a minimum of 0 as a safety precaution
+                    float offset_distance = (layerm->flow(frPerimeter).scaled_width()) * number_of_walls; // shrink down by number of external walls * width of them, effectively filtering out 2x internal perimeter wide bridges
+                    ExPolygons walls_solid = offset_ex(local_mask, offset_distance);
+                    SurfaceType type       = surface.surface_type;
+                    ExPolygons cropped     = intersection_ex(surface.expolygon, local_mask);
+                    surface.expolygon.clear();
+                    surfaces_append(new_surfaces, cropped, type);
+                    if (layerm->m_region->config().top_surface_density.value < 100) {
+                        surfaces_append(new_surfaces, intersection_ex(local_mask, crop_mask, ApplySafetyOffset::Yes), stInternalSolid); // stSubTop
+                        surfaces_append(new_surfaces, intersection_ex(diff_ex(walls_solid, local_mask, ApplySafetyOffset::Yes), crop_mask, ApplySafetyOffset::Yes), stInternalBridge);
+                    } else
+                        surfaces_append(new_surfaces, intersection_ex(walls_solid, crop_mask, ApplySafetyOffset::Yes), stInternalSolid);
+                }
             }
+            layerm->fill_surfaces.append(new_surfaces);
         }
     };
 
