@@ -687,27 +687,27 @@ void Field::get_value_by_opt_type(wxString& str, const bool check_value/* = true
                 // The layout table contains the correspondence of the pressed national letter in the English layout.
                 for (char& ch : ustr) { 
                     if (static_cast<unsigned char>(ch) > 127) { // has any unicode symbol
-                        wstring wstr(str.ToStdWstring());
-                        wstring const in_glyph[]{L"АΑ", L"а",    L"Β",  L"",     L"СҪ",  L"сҫ", L"",  L"",        L"ЕЁΕ",     L"е",      L"",     L"",   L"",
-                                                 L"",   L"ҢҤΗ",  L"һ",  L"ΙІЇӀ", L"іїι", L"Ј",  L"ј", L"КЌҚҜҞҠΚ", L"кќқҝҟҡκ", L"",       L"",     L"МΜ", L"м",
-                                                 L"Ν",  L"пπ",   L"ОΟ", L"оο",   L"РΡ",  L"рρ", L"",  L"",        L"",        L"",       L"Ѕ",    L"ѕ",  L"TҬΤ",
-                                                 L"ҭτ", L"",     L"υ",  L"",     L"ν",   L"",   L"",  L"ХҲΧ",     L"хҳχ",     L"УўЎҮҰΥ", L"ўүұу", L"Ζ",  L""};
-                        wstring const in_keyboard_layout[]{L"Ф", L"ф", L"И", L"и", L"С", L"с", L"В", L"в", L"У", L"у", L"А", L"а", L"П",
-                                                           L"п", L"Р", L"р", L"Ш", L"ш", L"О", L"о", L"Л", L"л", L"Д", L"д", L"Ь", L"ь",
-                                                           L"Т", L"т", L"Щ", L"щ", L"З", L"з", L"Й", L"й", L"К", L"к", L"Ы", L"ы", L"Е",
-                                                           L"е", L"Г", L"г", L"М", L"м", L"Ц", L"ц", L"Ч", L"ч", L"Н", L"н", L"Я", L"я"};
-                        string const out_symbol{"AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz"};
+                        std::wstring wstr(str.ToStdWstring());
+                        std::wstring const in_glyph[]{L"АΑ", L"а",    L"Β",  L"",     L"СҪ",  L"сҫ", L"",  L"",        L"ЕЁΕ",     L"е",      L"",     L"",   L"",
+                                                      L"",   L"ҢҤΗ",  L"һ",  L"ΙІЇӀ", L"іїι", L"Ј",  L"ј", L"КЌҚҜҞҠΚ", L"кќқҝҟҡκ", L"",       L"",     L"МΜ", L"м",
+                                                      L"Ν",  L"пπ",   L"ОΟ", L"оο",   L"РΡ",  L"рρ", L"",  L"",        L"",        L"",       L"Ѕ",    L"ѕ",  L"TҬΤ",
+                                                      L"ҭτ", L"",     L"υ",  L"",     L"ν",   L"",   L"",  L"ХҲΧ",     L"хҳχ",     L"УўЎҮҰΥ", L"ўүұу", L"Ζ",  L""};
+                        std::wstring const in_keyboard_layout[]{L"Ф", L"ф", L"И", L"и", L"С", L"с", L"В", L"в", L"У", L"у", L"А", L"а", L"П",
+                                                                L"п", L"Р", L"р", L"Ш", L"ш", L"О", L"о", L"Л", L"л", L"Д", L"д", L"Ь", L"ь",
+                                                                L"Т", L"т", L"Щ", L"щ", L"З", L"з", L"Й", L"й", L"К", L"к", L"Ы", L"ы", L"Е",
+                                                                L"е", L"Г", L"г", L"М", L"м", L"Ц", L"ц", L"Ч", L"ч", L"Н", L"н", L"Я", L"я"};
+                        std::string const out_symbol{"AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz"};
                         for (int i = 0; i < out_symbol.size(); i++) {
-                            wstring gl = in_glyph[i];
-                            wstring kb = in_keyboard_layout[i];
-                            string out_string(out_symbol.substr(i, 1));
-                            wstring out_char(out_string.begin(), out_string.end());
+                            std::wstring gl = in_glyph[i];
+                            std::wstring kb = in_keyboard_layout[i];
+                            std::string out_string(out_symbol.substr(i, 1));
+                            std::wstring out_char(out_string.begin(), out_string.end());
                             if (!gl.empty()) {
-                                wregex glstr(L"([" + gl + L"])");
+                                std::wregex glstr(L"([" + gl + L"])");
                                 wstr = std::regex_replace(wstr, glstr, out_char);
                             } 
                             if (!kb.empty()) {
-                                wregex kbstr(L"([" + kb + L"])");
+                                std::wregex kbstr(L"([" + kb + L"])");
                                 wstr = std::regex_replace(wstr, kbstr, out_char);
                             }
                         }
@@ -720,18 +720,18 @@ void Field::get_value_by_opt_type(wxString& str, const bool check_value/* = true
                 ustr = std::regex_replace(ustr, std::regex("(\\d)(,)(\\d)"), "$1.$3");
 
                 // validate density percents
-                string      v;
+                std::string v;
                 std::smatch match;
 
                 // remove all unnecessary zeros 
                 std::regex pattern("([Dd][+\\-]?[\\d.]+[%:]?)"); 
                 while (std::regex_search(ustr, match, pattern)) {
-                    string match_str(match[1].str());
+                    std::string match_str(match[1].str());
                     v += match.prefix().str();
                     if (match_str.back() == ':' || match_str.back() == '%') {
                         v += match_str;
                     } else {
-                        string repl_str = match.str();
+                        std::string repl_str = match.str();
                         size_t r(repl_str.find_first_of("0123456789."));
                         if (r < repl_str.length()) {
                             v += repl_str.substr(0, r);
@@ -746,7 +746,7 @@ void Field::get_value_by_opt_type(wxString& str, const bool check_value/* = true
                 v    = "";
 
                 // split into separate commands
-                string ps = (m_opt.opt_key == "sparse_infill_rotate_template") ?
+                std::string ps = (m_opt.opt_key == "sparse_infill_rotate_template") ?
                                 u8"[BT][!]?|[#][\\d.]+[!]?|(?:[A]?[+\\-_]?[\\d.]+(?:[:]?[\\d.]+)?[%]?[;]?|[Dd][+\\-]?[\\d.]+(?:[:][\\d.]*|[%])?[;]?|(?:[X][_]?[Y]?|[x][_]?[y]?|[Yy])[+\\-_]?[\\d.]+(?:[:]?[\\d.]+)?[&@%\'\"c]?[m]{0,2}[;]?)+(?:[!]?[*][\\d]*|[*][\\d]*[!]?)?[\\^~/NnZz$LlUuQq#JjCc]?[+\\-]?[\\d.]*(?:[:]?[\\d.]+)?[%#\'\"c]?[m]{0,2}[BT]?(?:[!]?[*][\\d]+|[*][\\d]+[!]?)?" :
                                 u8"[#][\\d.]+[!]?|(?:[A]?[+\\-_]?[\\d.]+(?:[:]?[\\d.]+)?[%]?[;]?|(?:[X][_]?[Y]?|[x][_]?[y]?|[Yy])[+\\-_]?[\\d.]+(?:[:]?[\\d.]+)?[&@%\'\"c]?[m]{0,2}[;]?)+(?:[!]?[*][\\d]*|[*][\\d]*[!]?)?[\\^~/NnZz$LlUuQq#JjCc]?[+\\-]?[\\d.]*(?:[:]?[\\d.]+)?[%#\'\"c]?[m]{0,2}(?:[!]?[*][\\d]+|[*][\\d]+[!]?)?";
 
