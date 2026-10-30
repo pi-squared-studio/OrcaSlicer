@@ -716,8 +716,11 @@ void Field::get_value_by_opt_type(wxString& str, const bool check_value/* = true
                     }
                 }                
                 
+                // adjustment of the unnecessary separators
+                ustr = std::regex_replace(ustr, std::regex("\\s*;+\\s*;?\\s*"), ";");
+
                 // adjustment of the decimal separator
-                ustr = std::regex_replace(ustr, std::regex("(\\d)(,)(\\d)"), "$1.$3");
+                ustr = std::regex_replace(ustr, std::regex("(\\d)(,)(\\d+[^,.\\d\\s+\\-])"), "$1.$3");
 
                 // validate density percents
                 std::string v;
@@ -747,8 +750,8 @@ void Field::get_value_by_opt_type(wxString& str, const bool check_value/* = true
 
                 // split into separate commands
                 std::string ps = (m_opt.opt_key == "sparse_infill_rotate_template") ?
-                                u8"[BT][!]?|[#][\\d.]+[!]?|(?:[A]?[+\\-_]?[\\d.]+(?:[:]?[\\d.]+)?[%]?[;]?|[Dd][+\\-]?[\\d.]+(?:[:][\\d.]*|[%])?[;]?|(?:[X][_]?[Y]?|[x][_]?[y]?|[Yy])[+\\-_]?[\\d.]+(?:[:]?[\\d.]+)?[&@%\'\"c]?[m]{0,2}[;]?)+(?:[!]?[*][\\d]*|[*][\\d]*[!]?)?[\\^~/NnZz$LlUuQq#JjCc]?[+\\-]?[\\d.]*(?:[:]?[\\d.]+)?[%#\'\"c]?[m]{0,2}[BT]?(?:[!]?[*][\\d]+|[*][\\d]+[!]?)?" :
-                                u8"[#][\\d.]+[!]?|(?:[A]?[+\\-_]?[\\d.]+(?:[:]?[\\d.]+)?[%]?[;]?|(?:[X][_]?[Y]?|[x][_]?[y]?|[Yy])[+\\-_]?[\\d.]+(?:[:]?[\\d.]+)?[&@%\'\"c]?[m]{0,2}[;]?)+(?:[!]?[*][\\d]*|[*][\\d]*[!]?)?[\\^~/NnZz$LlUuQq#JjCc]?[+\\-]?[\\d.]*(?:[:]?[\\d.]+)?[%#\'\"c]?[m]{0,2}(?:[!]?[*][\\d]+|[*][\\d]+[!]?)?";
+                                  u8"[BT][!]?|[#][\\d.]+[!]?|(?:[A]?[+\\-_]?[\\d.]+(?:[:]?[\\d.]+)?[%]?[;]?|[Dd][+\\-]?[\\d.]+(?:[:][\\d.]*|[%])?[;]?|(?:[X][_]?[Y]?|[x][_]?[y]?|[Yy])[+\\-_]?[\\d.]+(?:[:]?[\\d.]+)?(?:[&@%\'\"c]?[m]{0,2})?[;]?)+(?:[!]?(?:[*][\\d]+)?|[*][\\d]+[!]?)?[\\^~/NnZz$LlUuQq#JjCc|]?[+\\-]?[\\d.]*(?:[:]?[\\d.]+)?[%#\'\"c]?[m]{0,2}[BT]?(?:[!]?(?:[*][\\d]+)?|[*][\\d]+[!]?)?" :
+                                  u8"[#][\\d.]+[!]?|(?:[A]?[+\\-_]?[\\d.]+(?:[:]?[\\d.]+)?[%]?[;]?|(?:[X][_]?[Y]?|[x][_]?[y]?|[Yy])[+\\-_]?[\\d.]+(?:[:]?[\\d.]+)?(?:[&@%\'\"c]?[m]{0,2})?[;]?)+(?:[!]?(?:[*][\\d]+)?|[*][\\d]+[!]?)?[\\^~/NnZz$LlUuQq#JjCc|]?[+\\-]?[\\d.]*(?:[:]?[\\d.]+)?[%#\'\"c]?[m]{0,2}(?:[!]?(?:[*][\\d]+)?|[*][\\d]+[!]?)?";
 
                 while (std::regex_search(ustr, match, std::regex(ps))) {
                     for (std::ssub_match const &x : match) v += x.str() + ", ";

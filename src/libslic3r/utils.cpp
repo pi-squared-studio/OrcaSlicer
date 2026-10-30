@@ -1801,7 +1801,10 @@ std::string get_str_value_wo_zeros(double in)
         if (d == e)
             e--;
     }
-    return repl_str.substr(s, e - s + 1);
+    repl_str = repl_str.substr(s, e - s + 1);
+    if (repl_str == "" || repl_str[0] == '.')
+        repl_str = "0" + repl_str;
+    return repl_str;
 }
 
 // Returns platform-specific string to be used as log output or parsed in SysInfoDialog.

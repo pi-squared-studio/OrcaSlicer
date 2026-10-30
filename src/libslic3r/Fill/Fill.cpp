@@ -101,15 +101,15 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
     // Convert the id to an index. Layer::id() counts the raft layers, object->layers() does not.
     const size_t first_object_layer_id = object->get_layer(0)->id();
     layer_id                           = layer_id > first_object_layer_id ? layer_id - first_object_layer_id : 0;
-    const std::string search_string    = "^~/NnZz$LlUuQq#JjCc"; // Attention: the first character in the string must be the ^ symbol, as it will later be escaped in the regex.
+    const std::string search_string    = "/^~NnZz$LlUuQq#JjCc|"; // Attention: the first character in the string must be the ^ symbol, as it will later be escaped in the regex.
     const std::string coord_string     = "XxYy";
     const std::string density_string   = "Dd";
     const std::string angle_string     = "A+-_0123456789.";
-    if (regex_search(template_string, std::regex("[+\\-%AXYxyDd_*@&\'\"cm\\" + search_string + "]"))) { // template metalanguage of rotating infill
+    std::string template_string2        = std::regex_replace(template_string, std::regex(";"), ""); // remove the easy-reading separators
+    if (regex_search(template_string2, std::regex("[+\\-%AXYxyDd_*@&\'\"cm\\" + search_string + "]"))) { // template metalanguage of rotating infill
         // Check for the "0X" character combination, which may be interpreted incorrectly by the strtod() function. 
         // Replace it with "X". The cases like "10X" not replaced.
-        std::string template_string2 = std::regex_replace(template_string, std::regex("(^|\\D)0+([xX])"), "$1$2");
-        template_string2 = std::regex_replace(template_string2, std::regex(";"), ""); // remove the easy-reading separators
+        template_string2 = std::regex_replace(template_string2, std::regex("(^|\\D)0+([xX])"), "$1$2");
         std::regex del("[\\s,]+");
         std::sregex_token_iterator it(template_string2.begin(), template_string2.end(), del, -1);
         std::vector<std::string> tk;                    // metacommands array
@@ -491,9 +491,9 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
             double negvalue = std::min(std::max((is_negative ? (limit_fill_z - fill_z) : (fill_z - start_fill_z)) / (limit_fill_z - start_fill_z), 0.), 1.);
 
             switch (fill_form) {
-            case 0:  negvalue += (double) rand() / RAND_MAX - .5; break;                           // ^-joint, pseudorandom, disperse at middle line
-            case 1:  negvalue  = (double) rand() / RAND_MAX; break;                                // ~-joint, random, fill the whole range
-            case 2:  break;                                                                        // /-joint, linear
+            case 0:  break;                                                                        // /-joint, linear
+            case 1:  negvalue += (double) rand() / RAND_MAX - .5; break;                           // ^-joint, pseudorandom, disperse at middle line
+            case 2:  negvalue  = (double) rand() / RAND_MAX; break;                                // ~-joint, random, fill the whole range
             case 3:  negvalue -= sin(negvalue * PI * 2.) / (PI * 2.); break;                       // N-joint, sinus, vertical start
             case 4:  negvalue -= sin(negvalue * PI * 2.) / (PI * 4.); break;                       // n-joint, sinus, vertical start, lazy
             case 5:  negvalue += sin(negvalue * PI * 2.) / (PI * 2.); break;                       // Z-joint, sinus, horizontal start
@@ -511,6 +511,7 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
             case 17: negvalue  = is_negative ? 1 - sqrt(1 - pow(negvalue * 2 - 1, 2)) : 
                                                sqrt(1 - pow(negvalue * 2 - 1, 2)); break;          // C-joint, half of circle // (_negative ? 1 - sin(negvalue * PI) : sin(negvalue * PI))
             case 18: negvalue  = (is_negative ? -.5 : .5) * cos(negvalue * PI * 2.) + .5; break;   // c-joint, vertical cosine wave
+            case 19: negvalue  = 0.5; break;                                                       // |-joint, J-joint copy (is used for compatibility)
             default: negvalue  = 1.;
             }
 
