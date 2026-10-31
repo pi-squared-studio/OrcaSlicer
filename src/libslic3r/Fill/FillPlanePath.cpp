@@ -112,7 +112,7 @@ void FillPlanePath::_fill_surface_single(
     if (is_internal) { // Internal infill
         if (fixed_angle) {
             bounding_box = this->bounding_box;
-            bounding_box.translate(this->shift);
+            //bounding_box.translate(this->shift);
             bounding_box.rotate(-angle);
             // Expand the bounding box to avoid artifacts at the edges
             bounding_box.offset(this->shift.norm());

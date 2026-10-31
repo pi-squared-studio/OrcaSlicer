@@ -76,7 +76,7 @@ inline Vec2d rotate_point_CW(double angle, Vec2d p)
 };
 
 // Orca: The parameters that are taken into account when calculating a rotating infill.
-struct Infill_Params
+struct InfillParams
 {
     double angle     = 0.;
     Vec2d  shift     = Vec2d(0, 0);
@@ -87,15 +87,15 @@ struct Infill_Params
 // Calculate infill rotation angle (in radians) for a given layer from a rotation template.
 // Check the link for more info: https://www.orcaslicer.com/wiki/print_settings/strength/strength_settings_infill_rotation_template_metalanguage
 // Attention: all incoming and outgoing direction values in radians!
-static Infill_Params calculate_infill_position_rad(const PrintObject* object,
-                                                   size_t layer_id,
-                                                   const double& fixed_infill_angle, // if template is used then it parameter must recieve model's direction
-                                                   const std::string& template_string,
-                                                   const double& fixed_infill_density = 100.,
-                                                   const int& fixed_multiline = 1,
-                                                   double line_width = 0.) // Get initial value from options
+static InfillParams calculate_infill_position_rad(const PrintObject* object,
+                                                  size_t layer_id,
+                                                  const double& fixed_infill_angle, // if template is used then it parameter must recieve model's direction
+                                                  const std::string& template_string,
+                                                  const double& fixed_infill_density = 100.,
+                                                  const int& fixed_multiline = 1,
+                                                  double line_width = 0.) // Get initial value from options
 {
-    Infill_Params params{fixed_infill_angle, Vec2d(0, 0), fixed_infill_density, fixed_multiline};
+    InfillParams params{fixed_infill_angle, Vec2d(0, 0), fixed_infill_density, fixed_multiline};
     if (template_string.empty())
         return params;
     // Convert the id to an index. Layer::id() counts the raft layers, object->layers() does not.
@@ -105,7 +105,7 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
     const std::string coord_string     = "XxYy";
     const std::string density_string   = "Dd";
     const std::string angle_string     = "A+-_0123456789.";
-    std::string template_string2        = std::regex_replace(template_string, std::regex(";"), ""); // remove the easy-reading separators
+    std::string template_string2       = std::regex_replace(template_string, std::regex(";"), ""); // remove the easy-reading separators
     if (regex_search(template_string2, std::regex("[+\\-%AXYxyDd_*@&\'\"cm\\" + search_string + "]"))) { // template metalanguage of rotating infill
         // Check for the "0X" character combination, which may be interpreted incorrectly by the strtod() function. 
         // Replace it with "X". The cases like "10X" not replaced.
@@ -283,7 +283,7 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
                                             if (y_sign)
                                                 shift_rel2[1] += shift_value * y_sign;
                                         }
-                                    } else  if (zone_mark == 'Y') { // get Y shift
+                                    } else if (zone_mark == 'Y') { // get Y shift
                                         if (is_abs_shift)
                                             shift_abs[1] += shift_value;
                                         else
@@ -511,7 +511,7 @@ static Infill_Params calculate_infill_position_rad(const PrintObject* object,
             case 17: negvalue  = is_negative ? 1 - sqrt(1 - pow(negvalue * 2 - 1, 2)) : 
                                                sqrt(1 - pow(negvalue * 2 - 1, 2)); break;          // C-joint, half of circle // (_negative ? 1 - sin(negvalue * PI) : sin(negvalue * PI))
             case 18: negvalue  = (is_negative ? -.5 : .5) * cos(negvalue * PI * 2.) + .5; break;   // c-joint, vertical cosine wave
-            case 19: negvalue  = 0.5; break;                                                       // |-joint, J-joint copy (is used for compatibility)
+            case 19: negvalue  = 0.5; break;                                                       // |-joint, copy of J-joint (is used for compatibility)
             default: negvalue  = 1.;
             }
 
@@ -1361,7 +1361,7 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                     params.fixed_angle = !region_config.sparse_infill_rotate_template.value.empty();
                     if (params.fixed_angle && params.pattern == ipHilbertCurve)
                         params.pattern_mode = 3;
-                    Infill_Params complex(calculate_infill_position_rad(layer.object(), layer.id(),
+                    InfillParams complex(calculate_infill_position_rad(layer.object(), layer.id(),
                                                                         align_offset + (params.fixed_angle ?
                                                                           0. : Geometry::deg2rad(region_config.infill_direction.value)),
                                                                         region_config.sparse_infill_rotate_template.value,
@@ -1386,7 +1386,7 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                         params.fixed_angle = !region_config.solid_infill_rotate_template.value.empty();
                         if (params.fixed_angle && params.pattern == ipHilbertCurve)
                             params.pattern_mode = 3;
-                        Infill_Params complex(calculate_infill_position_rad(layer.object(), layer.id(),
+                        InfillParams complex(calculate_infill_position_rad(layer.object(), layer.id(),
                                                                             align_offset + (params.fixed_angle ?
                                                                                 0. : Geometry::deg2rad(region_config.solid_infill_direction.value)),
                                                                             region_config.solid_infill_rotate_template.value, 1,
