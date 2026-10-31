@@ -238,6 +238,12 @@ static constexpr ClusteringBudget FIXED_SEARCH_BUDGET{
 // put filaments where the printer has them loaded cover that choice. Match-mode cases group by the
 // printer's filaments and keep them.
 //
+// A_mode_match_150 is checked for its constraints only. Match mode picks by colour, not flush, and its
+// colour comparison is finer than when the goldens were made (two-decimal distances where whole numbers
+// used to tie): that case's filament 2 (#37A850) now takes a slot at distance 10.16 on the second
+// extruder instead of one at 10.78 on the first, which costs more flush. The "Match-mode grouping" tests
+// cover how it picks.
+//
 // The tolerance is a parity allowance, and it also covers a small spread across standard libraries.
 // The k-medoids search seeds each restart with std::shuffle, whose algorithm the C++ standard leaves
 // unspecified, so libstdc++, libc++ and the MSVC STL permute the same seed differently, start from
@@ -276,7 +282,8 @@ TEST_CASE("FilamentGroup golden regression", "[filament_group][golden]") {
         int tolerance = std::max(50, (int)(base.full_score * 0.03));
 
         REQUIRE(result.constraints_ok);
-        REQUIRE(eval.full_score <= base.full_score + tolerance);
+        if (tc.metadata.id != "A_mode_match_150")
+            REQUIRE(eval.full_score <= base.full_score + tolerance);
 
         // A slower search still scores the same above, since it searches just as far, but in slicing
         // it would mean fewer restarts fit in the wall clock and so worse groupings. Loose on
@@ -475,4 +482,61 @@ TEST_CASE("Near-optimal groupings are kept within five filament changes, 60 poin
     CHECK_FALSE(kept(100, 201, 20));
     CHECK(kept(20000, 20200, 0));
     CHECK_FALSE(kept(20000, 20201, 0));
+}
+
+TEST_CASE("Match-mode grouping picks the slot of the same filament sub-type among slots of one colour", "[filament_group]") {
+    // Both extruders hold white PLA; only the second one's is the project filament's sub-type.
+    auto ctx = two_extruder_context({filament("#FFFFFF", "PLA")}, std::vector<std::vector<unsigned int>>(10, {0}), 0.f);
+    ctx.group_info.mode = FGMode::MatchMode;
+    ctx.model_info.filament_ids = {"GFA00"};
+    auto generic = loaded("#FFFFFF", "PLA", 0);
+    generic.filament_id = "GFL99";
+    auto same_sub_type = loaded("#FFFFFF", "PLA", 1);
+    same_sub_type.filament_id = "GFA00";
+    ctx.machine_info.machine_filament_info[0] = {generic};
+    ctx.machine_info.machine_filament_info[1] = {same_sub_type};
+
+    CHECK(grouped_extruders(ctx) == std::vector<int>{1});
+}
+
+TEST_CASE("Match-mode grouping ranks colour above filament sub-type", "[filament_group]") {
+    // The second extruder has the project filament's sub-type in a different shade; the first has
+    // the exact colour in another sub-type.
+    auto ctx = two_extruder_context({filament("#FFFFFF", "PLA")}, std::vector<std::vector<unsigned int>>(10, {0}), 0.f);
+    ctx.group_info.mode = FGMode::MatchMode;
+    ctx.model_info.filament_ids = {"GFA00"};
+    auto exact_colour = loaded("#FFFFFF", "PLA", 0);
+    exact_colour.filament_id = "GFL99";
+    auto same_sub_type = loaded("#D0D0D0", "PLA", 1);
+    same_sub_type.filament_id = "GFA00";
+    ctx.machine_info.machine_filament_info[0] = {exact_colour};
+    ctx.machine_info.machine_filament_info[1] = {same_sub_type};
+
+    CHECK(grouped_extruders(ctx) == std::vector<int>{0});
+}
+
+TEST_CASE("Match-mode grouping picks the closer colour when two slots differ by under one unit of distance", "[filament_group]") {
+    // Colour distances about 10.78 (first extruder) and 10.16 (second): equal in whole units.
+    auto ctx = two_extruder_context({filament("#37A850", "PLA")}, std::vector<std::vector<unsigned int>>(10, {0}), 0.f);
+    ctx.group_info.mode = FGMode::MatchMode;
+    ctx.machine_info.machine_filament_info[0] = {loaded("#40C111", "PLA", 0)};
+    ctx.machine_info.machine_filament_info[1] = {loaded("#3F8A30", "PLA", 1)};
+
+    CHECK(grouped_extruders(ctx) == std::vector<int>{1});
+}
+
+TEST_CASE("Match-mode grouping ranks one step of colour above a filament sub-type", "[filament_group]") {
+    // Against white, #F0F1F2 is at 2.9364 and #F0F1F1 at 2.9266: one step of 0.01 apart once rounded.
+    // The farther slot has the project filament's sub-type, the closer one another.
+    auto ctx = two_extruder_context({filament("#FFFFFF", "PLA")}, std::vector<std::vector<unsigned int>>(10, {0}), 0.f);
+    ctx.group_info.mode = FGMode::MatchMode;
+    ctx.model_info.filament_ids = {"GFA00"};
+    auto same_sub_type = loaded("#F0F1F2", "PLA", 0);
+    same_sub_type.filament_id = "GFA00";
+    auto closer_colour = loaded("#F0F1F1", "PLA", 1);
+    closer_colour.filament_id = "GFL99";
+    ctx.machine_info.machine_filament_info[0] = {same_sub_type};
+    ctx.machine_info.machine_filament_info[1] = {closer_colour};
+
+    CHECK(grouped_extruders(ctx) == std::vector<int>{1});
 }

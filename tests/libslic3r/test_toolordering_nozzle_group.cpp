@@ -1,7 +1,9 @@
 #include <boost/filesystem/operations.hpp>
 #include <catch2/catch_all.hpp>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
 #include "libslic3r/FilamentGroupUtils.hpp"
@@ -220,13 +222,15 @@ TEST_CASE("Grouping context spans the filament count with mis-sized config array
 
 namespace {
 // A filament the printer reports loaded, in the form Plater hands to Print::set_extruder_filament_info.
-DynamicPrintConfig loaded_filament(const std::string &colour, const std::string &type, const std::string &tray_name)
+DynamicPrintConfig loaded_filament(const std::string &colour, const std::string &type, const std::string &tray_name,
+                                   const std::string &filament_id = "")
 {
     DynamicPrintConfig tray;
     tray.set_key_value("filament_colour", new ConfigOptionStrings{colour});
     tray.set_key_value("filament_type", new ConfigOptionStrings{type});
     tray.set_key_value("tray_name", new ConfigOptionStrings{tray_name});
     tray.set_key_value("filament_is_support", new ConfigOptionBools{false});
+    tray.set_key_value("filament_id", new ConfigOptionStrings{filament_id});
     return tray;
 }
 
@@ -312,6 +316,27 @@ TEST_CASE("Filament-saving grouping prefers the master extruder when the printer
     for (int f = 0; f < 3; ++f)
         on_master += result.get_extruder_id(f) == 1;
     REQUIRE(on_master == 2);
+}
+
+TEST_CASE("Convenience-mode grouping puts a filament where the printer holds its sub-type", "[ToolOrdering][H2C]")
+{
+    // Both extruders hold white PLA; only the second one's is the project filament's sub-type. One
+    // nozzle on the second extruder runs the two-extruder match; six run the multi-nozzle one.
+    const int second_extruder_nozzles = GENERATE(1, 6);
+    DynamicPrintConfig config = master_second_extruder_config(second_extruder_nozzles, {"#FFFFFF"});
+    config.option<ConfigOptionStrings>("filament_ids", true)->values = {"GFA00"};
+    Model model;
+    model.add_object("cube", "", make_cube(20, 20, 20))->add_instance();
+    Print print;
+    print.apply(model, config);
+    print.is_BBL_printer() = true;
+    print.set_extruder_filament_info({{loaded_filament("#FFFFFF", "PLA", "A1", "GFL99")},
+                                      {loaded_filament("#FFFFFF", "PLA", "A1", "GFA00")}});
+
+    auto result = ToolOrdering::get_recommended_filament_maps({{0}, {0}, {0}}, &print, FilamentMapMode::fmmAutoForMatch, {}, {});
+
+    INFO("Nozzles on the second extruder: " << second_extruder_nozzles);
+    REQUIRE(result.get_extruder_id(0) == 1);
 }
 
 TEST_CASE("Filament-saving grouping on a multi-nozzle printer keeps filaments on the extruder the printer has them loaded in", "[ToolOrdering][H2C]")
