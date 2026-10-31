@@ -85,13 +85,14 @@ namespace Slic3r
         return h;
     }
 
+    // Flush volume (mm^3) to a time-equivalent score (s): volume -> mass (1.26 g/cm^3) -> flushing
+    // time (180 s/g) x 2 correction. Shared by evaluate_score and calc_one_change_budget.
+    static constexpr double FLUSH_VOLUME_TO_SCORE = 1.26 * 180.0 * 2.0 / 1000.0;
+
     static double evaluate_score(const double flush, const double time, const bool with_time = false) {
         if (!with_time) return flush;
 
-        double approx_density = 1.26;    //   g/cm^3
-        double approx_flush_speed = 180; //   s/g
-        double correction_factor = 2;
-        double flush_score = flush * approx_density * approx_flush_speed * correction_factor / 1000;
+        double flush_score = flush * FLUSH_VOLUME_TO_SCORE;
         return flush_score + time;
     }
 
@@ -226,6 +227,33 @@ namespace Slic3r
         return total / std::max(dedup_factor, 1);
     }
 
+    double FilamentGroup::calc_one_change_budget(const std::vector<unsigned int>& used_filaments) const
+    {
+        // The median, over every pair of used filaments, of the flush in the costlier direction:
+        // what one typical change costs with this palette. The median ignores a few extreme pairs
+        // (black to white) and follows the palette: large for dark/light mixes, small for similar
+        // colours. 0 for fewer than two filaments or no flush matrix, leaving the absolute and
+        // relative floors in update_memoryed_groups.
+        const size_t n = used_filaments.size();
+        if (n < 2 || ctx.model_info.flush_matrix.empty())
+            return 0.0;
+
+        std::vector<float> pair_flush;
+        for (const auto& fm : ctx.model_info.flush_matrix)
+            for (size_t i = 0; i < n; ++i)
+                for (size_t j = i + 1; j < n; ++j)
+                    pair_flush.push_back(std::max(fm[used_filaments[i]][used_filaments[j]],
+                                                  fm[used_filaments[j]][used_filaments[i]]));
+        if (pair_flush.empty())
+            return 0.0;
+
+        const size_t mid = pair_flush.size() / 2;
+        std::nth_element(pair_flush.begin(), pair_flush.begin() + mid, pair_flush.end());
+
+        constexpr double one_change_margin = 1.2; // so that a whole typical change fits the tolerance
+        return pair_flush[mid] * FLUSH_VOLUME_TO_SCORE * one_change_margin;
+    }
+
     std::vector<int> FilamentGroup::calc_group_by_enum(
         int k,
         const std::vector<unsigned int>& used_filaments,
@@ -238,6 +266,7 @@ namespace Slic3r
         static constexpr int BEST_FIT_LIMIT_REWARD = 10;
 
         int n = (int)used_filaments.size();
+        const double one_change_budget = calc_one_change_budget(used_filaments);
 
         std::vector<std::vector<int>> candidates(n);
         for (int i = 0; i < n; i++) {
@@ -364,7 +393,7 @@ namespace Slic3r
             }
 
             MemoryedGroup mg(used_labels, score, prefer_level);
-            update_memoryed_groups(mg, ctx.group_info.max_gap_threshold, m_memoryed_heap);
+            update_memoryed_groups(mg, one_change_budget, ctx.group_info.max_gap_threshold, m_memoryed_heap);
         }
 
         if (cost) *cost = best_flush;
@@ -381,6 +410,7 @@ namespace Slic3r
         KMediods PAM(k, (int)used_filaments.size(), distance_evaluator, ctx.machine_info.master_extruder_id);
         PAM.set_unplacable_limits(unplaceable_limits);
         PAM.set_memory_threshold(ctx.group_info.max_gap_threshold);
+        PAM.set_one_change_budget(calc_one_change_budget(used_filaments));
 
         std::vector<std::pair<std::set<int>, int>> cluster_size_limit;
         for (auto& [extruder_id, nozzles] : ctx.nozzle_info.extruder_nozzle_list) {
@@ -443,6 +473,12 @@ namespace Slic3r
         std::vector<std::vector<MachineFilamentInfo>> machine_filament_info = machine_filament_info_;
         machine_filament_info.resize(2);
 
+        // With no filament reported by the printer (not connected, AMS not synced) every candidate
+        // costs the same, so keep the first one rather than let the tie order decide.
+        if (std::all_of(machine_filament_info.begin(), machine_filament_info.end(),
+                        [](const std::vector<MachineFilamentInfo>& filaments) { return filaments.empty(); }))
+            return filament_to_nozzles.size() ? filament_to_nozzles.front() : std::vector<int>();
+
         int best_cost = std::numeric_limits<int>::max();
         std::vector<int>best_map;
 
@@ -462,7 +498,9 @@ namespace Slic3r
                 if (group_colors[i].empty())
                     continue;
                 if (machine_filament_info[i].empty()) {
-                    group_cost += group_colors.size() * fail_cost;
+                    // Per filament, the scale of the matching below; per extruder would make the
+                    // groupings that use fewer extruders the cheaper ones.
+                    group_cost += (int)group_colors[i].size() * fail_cost;
                     continue;
                 }
                 std::vector<std::vector<float>>distance_matrix(group_colors[i].size(), std::vector<float>(machine_filament_info[i].size()));
@@ -515,16 +553,17 @@ namespace Slic3r
     }
 
 
-    void FilamentGroupUtils::update_memoryed_groups(const MemoryedGroup& item, const double gap_threshold, MemoryedGroupHeap& groups)
+    void FilamentGroupUtils::update_memoryed_groups(const MemoryedGroup& item, const double one_change_budget, const double gap_threshold, MemoryedGroupHeap& groups)
     {
-        auto emplace_if_accepatle = [gap_threshold](MemoryedGroupHeap& heap, const MemoryedGroup& elem, const MemoryedGroup& best) {
-            if (best.cost == 0) {
-                if (std::abs(elem.cost - best.cost) <= ABSOLUTE_FLUSH_GAP_TOLERANCE)
-                    heap.push(elem);
-                return;
-            }
-            double gap_rate = (double)std::abs(elem.cost - best.cost) / (double)best.cost;
-            if (gap_rate <= gap_threshold)
+        // Keep candidates up to about five typical filament changes worse than the best, so that
+        // select_best_group_for_ams can prefer a grouping that matches the filaments loaded in the
+        // printer (two filaments kept on the extruder that has them, a lone filament on the
+        // non-master extruder) over the plain least-flush split. The absolute and relative floors
+        // cover a zero budget and very large scores.
+        auto emplace_if_accepatle = [one_change_budget, gap_threshold](MemoryedGroupHeap& heap, const MemoryedGroup& elem, const MemoryedGroup& best) {
+            double gap = std::abs(elem.cost - best.cost);
+            double tolerance = std::max(std::max(ABSOLUTE_FLUSH_GAP_TOLERANCE * 6.0, one_change_budget * 5.0), best.cost * gap_threshold);
+            if (gap <= tolerance)
                 heap.push(elem);
             };
 
@@ -849,7 +888,7 @@ namespace Slic3r
             double           curr_cluster_cost   = evaluate_labels(curr_cluster_labels);
 
             MemoryedGroup g(curr_cluster_labels, curr_cluster_cost, 1);
-            update_memoryed_groups(g, memory_threshold, memoryed_groups);
+            update_memoryed_groups(g, m_one_change_budget, memory_threshold, memoryed_groups);
 
             bool mediods_changed = true;
             while (mediods_changed && within_budget()) {
@@ -884,7 +923,7 @@ namespace Slic3r
                     curr_cluster_cost   = evaluate_labels(curr_cluster_labels);
 
                     MemoryedGroup g(curr_cluster_labels, curr_cluster_cost, 1);
-                    update_memoryed_groups(g, memory_threshold, memoryed_groups);
+                    update_memoryed_groups(g, m_one_change_budget, memory_threshold, memoryed_groups);
                 }
             }
 
